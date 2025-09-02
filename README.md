@@ -1,4 +1,4 @@
-# Bulk RNA-seq Time-Course Reproducible Pipeline (QC, DGE, Functional Analysis): Dataset; ZRN01 Example #1 Analysis Workflow (RM) by Ha-Na Shim
+# Bulk RNA-seq Time-Course Workflow (QC, DGE, Functional Analysis): ZRN01 Example #1 Analysis Workflow (RM)
 
 Analysis and pipeline designed by: 
 Ha-Na Shim 
