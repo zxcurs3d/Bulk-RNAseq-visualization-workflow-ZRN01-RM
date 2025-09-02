@@ -64,3 +64,16 @@ For any inquiries or suggestions to the below pipeline, my email is: hshim1@uchi
 [Salmon-url]: https://combine-lab.github.io/salmon/
 [Kallisto-url]: https://pachterlab.github.io/kallisto/
 [MultiQC-url]: https://multiqc.info/
+
+
+## CPM distribution filtering
+
+## Distribution of counts
+
+## DESeq2 normalization assessment
+
+## sample-to-sample correlation matrix heatmap
+
+## PCA plot
+
+## dendogram
