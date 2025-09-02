@@ -93,7 +93,25 @@ For any inquiries or suggestions to the below pipeline, my email is: hshim1@uchi
   <img src="1-figures/quality_control/qc_f3_f4_comb.svg" alt="CPM distribution F3–F4" width="48%"/>
 </p>
 
+<h3>Parameters used for CPM filtering</h3>
+
+<p>
+  <strong>Criteria:</strong> &gt;3 CPM in at least 3 replicates
+</p>
+
+<pre><code class="language-r">
+total_genes <- nrow(cpm_matrix)
+expressed_genes <- rowSums(cpm_matrix > 3) >= 3
+n_expressed <- sum(expressed_genes)
+</code></pre>
+
+## 1b. Library size comparison across all samples
+
+![Library size boxplot](1-figures/quality_control/lib_size_boxplot.svg)
+
 ## 1b. Distribution of p-values across DESeq2 contrasts of interest
+
+![p-value distributions](1-figures/quality_control/pvalue_distributions.svg)
 
 ## 1c. log2FoldChange scatterplots to compare effect of DESeq2's apeglm shrinkage vs. no shrinkage
 
@@ -120,3 +138,6 @@ For any inquiries or suggestions to the below pipeline, my email is: hshim1@uchi
 </p>
 
 ## 1f. Gene subtype lineplot across
+
+![Gene biotype lineplot](1-figures/quality_control/gene_biotype_lineplot.svg)
+
