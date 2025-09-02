@@ -74,6 +74,6 @@ For any inquiries or suggestions to the below pipeline, my email is: hshim1@uchi
 
 ## sample-to-sample correlation matrix heatmap
 
-## PCA plot
+## PCA plot (with and withlout loadings + SCREE plot
 
 ## dendogram
