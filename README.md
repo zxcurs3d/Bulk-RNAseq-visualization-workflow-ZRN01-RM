@@ -1,13 +1,23 @@
 # Bulk RNA-seq Time-Course Workflow (QC, DGE, Functional Analysis): ZRN01 Example #1 Analysis Workflow (RM)
 
-Analysis and pipeline by: 
-Ha-Na Shim 
+Analysis and pipeline by: Ha-Na Shim 
 
 Date: 09/01/2024
 
 For any inquiries or suggestions to the below pipeline, my email is: hshim1@uchicago.edu
 
-### Tools/packages used
+## Table of Contents
+- [Data & Inputs](#data--inputs)
+- [Part 1: Quality control and sample assessment](#part-1-quality-control-and-sample-assessment)
+  - [CPM distribution filtering](#cpm-distribution-filtering)
+  - [Distribution of counts](#distribution-of-counts)
+  - [DESeq2 normalization assessment](#deseq2-normalization-assessment)
+  - [Sample-to-sample correlation & dendrogram](#sample-to-sample-correlation--dendrogram)
+  - [PCA (± loadings) & Scree](#pca--loadings--scree)
+- [Downstream DGE & Functional Analysis (stubs)](#downstream-dge--functional-analysis-stubs)
+- [Reproducibility](#reproducibility)
+
+## Tools/packages used
 
 <!-- Horizontal badges -->
 [![R][R-badge]][R-url] [![RStudio][RStudio-badge]][RStudio-url] [![pheatmap][pheatmap-badge]][pheatmap-url] [![ggplot2][ggplot2-badge]][ggplot2-url] [![tidyverse][tidyverse-badge]][tidyverse-url] [![nf-core][nfcore-badge]][nfcore-url] [![Snakemake][Snakemake-badge]][Snakemake-url] [![Salmon][Salmon-badge]][Salmon-url] [![Kallisto][Kallisto-badge]][Kallisto-url] [![MultiQC][MultiQC-badge]][MultiQC-url]
@@ -66,14 +76,47 @@ For any inquiries or suggestions to the below pipeline, my email is: hshim1@uchi
 [MultiQC-url]: https://multiqc.info/
 
 
-## CPM distribution filtering
+# Part 1: Quality control and sample clustering
 
-## Distribution of counts
+ [1a. CPM distribution filtering](#1a-cpm-distribution-filtering)
+- [1b. Distribution of p-values across DESeq2 contrasts of interest](#1b-distribution-of-p-values-across-deseq2-contrasts-of-interest)
+- [1c. log2FoldChange scatterplots to compare shrinkage vs. no shrinkage](#1c-log2foldchange-scatterplots-to-compare-effect-of-deseq2s-apeglm-shrinkage-vs-no-shrinkage)
+- [1c. DESeq2 normalization assessment](#1c-deseq2-normalization-assessment)
+- [1d. Sample-to-sample correlation matrix heatmap](#1d-sample-to-sample-correlation-matrix-heatmap)
+- [1e. PCA plot (± loadings + Scree)](#1e-pca-plot-with-and-withlout-loadings--scree-plot)
+- [1f. Lineplot of gene subtypes across all samples](#1f-lineplot-of-gene-subtypes-across-all-samples)
 
-## DESeq2 normalization assessment
+## 1a. CPM distribution filtering
 
-## sample-to-sample correlation matrix heatmap
+<p align="center">
+  <img src="1-figures/quality_control/qc_f1_f2_comb.svg" alt="CPM distribution F1–F2" width="48%"/>
+  <img src="1-figures/quality_control/qc_f3_f4_comb.svg" alt="CPM distribution F3–F4" width="48%"/>
+</p>
 
-## PCA plot (with and withlout loadings + SCREE plot
+## 1b. Distribution of p-values across DESeq2 contrasts of interest
 
-## dendogram
+## 1c. log2FoldChange scatterplots to compare effect of DESeq2's apeglm shrinkage vs. no shrinkage
+
+## 1c. DESeq2 normalization assessment
+
+<p align="center">
+  <img src="1-figures/quality_control/dispersion_plot.svg" alt="DESeq2 dispersion plot" width="45%"/>
+  <img src="1-figures/quality_control/rle_combined_fig.svg" alt="RLE boxplot visualization" width="45%"/>
+</p>
+
+## 1d. sample-to-sample correlation matrix heatmap
+
+<p align="center">
+  <img src="1-figures/quality_control/sample_correlation_heatmap.svg" alt="Sample-to-sample correlation matrix heatmap" width="45%"/>
+  <img src="1-figures/quality_control/sample_dendrogram.svg" alt="Sample dendrogram" width="45%"/>
+</p>
+
+## 1e. PCA plot (with and withlout loadings + SCREE plot
+
+<p align="center">
+  <img src="1-figures/quality_control/pca_plot_noloadings.svg" alt="PCA plot without loadings" width="30%"/>
+  <img src="1-figures/quality_control/pca_plot_loadings.svg" alt="PCA plot with loadings" width="30%"/>
+  <img src="1-figures/quality_control/scree_plot.svg" alt="Scree plot" width="30%"/>
+</p>
+
+## 1f. Gene subtype lineplot across
