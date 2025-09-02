@@ -94,7 +94,6 @@ For any inquiries or suggestions to the below pipeline, my email is: hshim1@uchi
 </p>
 
 <h3>Parameters used for CPM filtering</h3>
-
 <p>
   <strong>Criteria:</strong> &gt;3 CPM in at least 3 replicates
 </p>
