@@ -1,6 +1,6 @@
 # Bulk RNA-seq Time-Course Workflow (QC, DGE, Functional Analysis): ZRN01 Example #1 Analysis Workflow (RM)
 
-Analysis and pipeline designed by: 
+Analysis and pipeline by: 
 Ha-Na Shim 
 
 Date: 09/01/2024
