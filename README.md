@@ -3,7 +3,7 @@
 <p><strong>Analysis and pipeline prepared by:</strong> Ha-Na Shim</p>
 <p><strong>Contact:</strong> hshim1@uchicago.edu for questions, feedback, or suggestions regarding this workflow.</p>
 
-## Awknowledgements
+## Tools/packages used
 
 <!-- Horizontal badges -->
 [![R][R-badge]][R-url] [![RStudio][RStudio-badge]][RStudio-url] [![pheatmap][pheatmap-badge]][pheatmap-url] [![ggplot2][ggplot2-badge]][ggplot2-url] [![tidyverse][tidyverse-badge]][tidyverse-url] [![nf-core][nfcore-badge]][nfcore-url] [![Snakemake][Snakemake-badge]][Snakemake-url] [![Salmon][Salmon-badge]][Salmon-url] [![Kallisto][Kallisto-badge]][Kallisto-url] [![MultiQC][MultiQC-badge]][MultiQC-url]
