@@ -150,3 +150,15 @@ DESeq2 offers a wi
 ![Gene biotype lineplot](1-figures/quality_control/gene_biotype_lineplot.svg)
 
 For QC purposes, this plot is likely superfluous/unnecessary. Regardless, samples with technical/sequencing issues will show an altered number of counts for a particular gene subtype. 
+
+
+
+# Part 2: Differential gene expression analysis
+
+## Histogram of upregulated and downregulated DEG counts for each timepoint
+
+## 2a. Volcano plots of differentially expressed genes
+
+## Gene ontology (GO) enrichment analysis of upregulated and downregulated differentially expressed genes
+
+## edgeR Counts per million (CPM) boxpltos of genes of interest over course of differentiation
