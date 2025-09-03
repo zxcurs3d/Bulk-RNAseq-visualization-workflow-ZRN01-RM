@@ -1,4 +1,4 @@
-# Bulk RNA-seq Time-Course Workflow: ZRN01 Example #1 Analysis (RM)
+# Bulk RNA-seq Time-Course Analysis: ZRN01 Example #1 (RM)
 
 Analysis and pipeline by: Ha-Na Shim 
 
