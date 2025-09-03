@@ -238,6 +238,12 @@ Interestingly, in the case of this experiment, our condition of interest (genoty
 
 ## 1c. log2FoldChange scatterplots to compare effect of DESeq2's apeglm shrinkage vs. no shrinkage
 
+<!-- QC: Shrinkage comparison -->
+<p align="center">
+  <a href="1-figures/quality_control/shrinkage_comparison.svg">
+    <img src="1-figures/quality_control/shrinkage_comparison.svg" alt="Shrinkage comparison" width="720">
+  </a>
+</p>
 
 DESeq2 offers a wi
 
@@ -276,17 +282,16 @@ For QC purposes, this plot is likely superfluous/unnecessary. Regardless, sample
 ## Histogram of upregulated and downregulated DEG counts for each timepoint
 
 <p align="center">
-  <a href="1-figures/volcano/scatterplot/deg_histogram.svg">
-    <img src="1-figures/volcano/scatterplot/deg_histogram.svg" alt="DEG histogram" width="600">
+  <a href="1-figures/differential_gene_expression/deg_histogram.svg">
+    <img src="1-figures/differential_gene_expression/deg_histogram.svg" alt="DEG histogram" width="720">
   </a>
 </p>
-
 
 ## 2a. Volcano plots of differentially expressed genes
 
 <p align="center">
-  <a href="1-figures/volcano/scatterplot/volcano_combined_2x2_T21_vs_D21.svg">
-    <img src="1-figures/volcano/scatterplot/volcano_combined_2x2_T21_vs_D21.svg" alt="Volcano combined 2x2 — T21 vs D21" width="600">
+  <a href="1-figures/differential_gene_expression/volcano_combined_2x2_T21_vs_D21.svg">
+    <img src="1-figures/differential_gene_expression/volcano_combined_2x2_T21_vs_D21.svg" alt="Volcano combined 2×2 — T21 vs D21" width="720">
   </a>
 </p>
 
@@ -355,6 +360,5 @@ For QC purposes, this plot is likely superfluous/unnecessary. Regardless, sample
 </p>
 
 ## GSEA of custom GO lists
-
 
 ## CPM boxplots for genes of interest
