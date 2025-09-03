@@ -624,8 +624,8 @@ print(shrinkage_comparison)
 # Save the combined plot
 ggsave("1-figures/quality_control/shrinkage_comparison.svg", 
        plot = shrinkage_comparison, 
-       width = 12, 
-       height = 12, 
+       width = 7, 
+       height = 7, 
        dpi = 300)
 
 ```

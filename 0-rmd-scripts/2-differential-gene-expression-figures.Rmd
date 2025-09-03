@@ -12,6 +12,22 @@ library(VennDiagram)
 library(grid)
 library(svglite)
 library(UpSetR)
+# Load required libraries ------------------------------------------------------
+library(pheatmap)
+library(RColorBrewer)
+library(dplyr)
+library(ggplot2)
+library(dplyr)
+library(patchwork)
+library(matrixStats)
+# Load required libraries ------------------------------------------------------
+library(pheatmap)
+library(RColorBrewer)
+library(dplyr)
+library(ggplot2)
+library(patchwork)
+library(matrixStats)
+library(viridis)
 
 ```
 
@@ -1951,18 +1967,7 @@ for (i in c(4, 7, 10, 15)) {
 
 ```
 
-```{r heatmap and clustering lineplots}
-
-
-# Load required libraries ------------------------------------------------------
-library(pheatmap)
-library(RColorBrewer)
-library(dplyr)
-library(ggplot2)
-library(dplyr)
-library(patchwork)
-library(matrixStats)
-
+```{r heatmap and clustering lineplots for go term}
 
 # Prepare data -----------------------------------------------------------------
 # Z-score transform function
@@ -2056,8 +2061,6 @@ p <- pheatmap(
   treeheight_col = 0
 )
 print(p)
-
-# Load required libraries ------------------------------------------------------
 
 # Function to calculate cluster statistics -------------------------------------
 calculate_cluster_stats <- function(cluster_num, cluster_genes, vst_data, metadata) {
@@ -2156,23 +2159,15 @@ print(combined_plot_RM)
 # Save combined plot -----------------------------------------------------------
 ggsave("rm_cluster_lineplots.svg", 
        plot = combined_plot_RM, 
-       width = 8, 
-       height = 8, 
+       width = 5, 
+       height = 5, 
        dpi = 300)
 
+```
 
-
+```{r heatmap of top variable genes}
 
 # heatmap of top variable genes
-
-# Load required libraries ------------------------------------------------------
-library(pheatmap)
-library(RColorBrewer)
-library(dplyr)
-library(ggplot2)
-library(patchwork)
-library(matrixStats)
-library(viridis)
 
 # Identify top 500 variable genes ---------------------------------------------
 # Calculate row variances across all samples
@@ -2180,7 +2175,7 @@ gene_variances <- rowVars(as.matrix(rm_vst_counts))
 names(gene_variances) <- rownames(rm_vst_counts)
 
 # Get top 500 most variable genes
-top500_variable_genes <- names(sort(gene_variances, decreasing = TRUE)[1:500])
+top500_variable_genes <- names(sort(gene_variances, decreasing = TRUE)[1:1000])
 
 # Prepare data for heatmap ----------------------------------------------------
 z_score_row <- function(x) {
@@ -2233,8 +2228,6 @@ gaps_col <- cumsum(genotype_table)[-length(genotype_table)]
 # Create heatmap title ---------------------------------------------------------
 n_genes <- nrow(RM_vst_counts_z_sub_ordered)
 plot_title <- paste0("Top 500 Variable Genes: T21 vs D21 Across Timepoints (n=", n_genes, ")")
-
-# Create the heatmap -----------------------------------------------------------
 p_heatmap <- pheatmap(
   RM_vst_counts_z_sub_ordered,
   color = viridis(100),
@@ -2258,11 +2251,13 @@ p_heatmap <- pheatmap(
   treeheight_col = 0
 )
 
-print(p_heatmap)
+# Save using ggsave
+ggsave("1-figures/differential_gene_expression/heatmap_top1000var.svg", 
+       plot = p_heatmap, 
+       width = 10, 
+       height = 8, 
+       dpi = 300)
 
-
-# Create line plots for clusters ----------------------------------------------
-# Function to calculate cluster statistics
 calculate_cluster_stats <- function(cluster_num, cluster_genes, vst_data, metadata) {
   genes_in_cluster <- cluster_genes[[cluster_num]]
   vst_subset <- vst_data[rownames(vst_data) %in% genes_in_cluster, ]
@@ -2354,37 +2349,11 @@ combined_plot_RM <- wrap_plots(plot_list_RM, ncol = 2, nrow = 2) +
 print(combined_plot_RM)
 
 # Save line plots
-ggsave("top500_variable_genes_lineplots.svg", 
+ggsave("1-figures/differential_gene_expression/top500_variable_genes_lineplots.svg", 
        plot = combined_plot_RM, 
-       width = 10, 
-       height = 8, 
+       width = 5, 
+       height = 4, 
        dpi = 300)
-
-# Print summary statistics -----------------------------------------------------
-for(i in 1:n_clusters) {
-  cat(paste("\nCluster M", i, " contains ", length(cluster_genes_RM[[i]]), " genes\n", sep = ""))
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 ```
