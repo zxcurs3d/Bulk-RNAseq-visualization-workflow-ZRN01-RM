@@ -2254,8 +2254,8 @@ p_heatmap <- pheatmap(
 # Save using ggsave
 ggsave("1-figures/differential_gene_expression/heatmap_top1000var.svg", 
        plot = p_heatmap, 
-       width = 10, 
-       height = 8, 
+       width = 5, 
+       height = 6.5, 
        dpi = 300)
 
 calculate_cluster_stats <- function(cluster_num, cluster_genes, vst_data, metadata) {
