@@ -4,18 +4,6 @@ Analysis and pipeline by: Ha-Na Shim
 
 For any inquiries or suggestions to the below pipeline, my email is: hshim1@uchicago.edu
 
-
-## Table of Contents
-- [Data & Inputs](#data--inputs)
-- [Part 1: Quality control and sample assessment](#part-1-quality-control-and-sample-assessment)
-  - [CPM distribution filtering](#cpm-distribution-filtering)
-  - [Distribution of counts](#distribution-of-counts)
-  - [DESeq2 normalization assessment](#deseq2-normalization-assessment)
-  - [Sample-to-sample correlation & dendrogram](#sample-to-sample-correlation--dendrogram)
-  - [PCA (± loadings) & Scree](#pca--loadings--scree)
-- [Downstream DGE & Functional Analysis (stubs)](#downstream-dge--functional-analysis-stubs)
-- [Reproducibility](#reproducibility)
-
 ## Tools/packages used
 
 <!-- Horizontal badges -->
@@ -73,6 +61,17 @@ For any inquiries or suggestions to the below pipeline, my email is: hshim1@uchi
 [Salmon-url]: https://combine-lab.github.io/salmon/
 [Kallisto-url]: https://pachterlab.github.io/kallisto/
 [MultiQC-url]: https://multiqc.info/
+
+## Table of Contents
+- [Data & Inputs](#data--inputs)
+- [Part 1: Quality control and sample assessment](#part-1-quality-control-and-sample-assessment)
+  - [CPM distribution filtering](#cpm-distribution-filtering)
+  - [Distribution of counts](#distribution-of-counts)
+  - [DESeq2 normalization assessment](#deseq2-normalization-assessment)
+  - [Sample-to-sample correlation & dendrogram](#sample-to-sample-correlation--dendrogram)
+  - [PCA (± loadings) & Scree](#pca--loadings--scree)
+- [Downstream DGE & Functional Analysis (stubs)](#downstream-dge--functional-analysis-stubs)
+- [Reproducibility](#reproducibility)
 
 ### Required packages and R version
 
