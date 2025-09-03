@@ -226,7 +226,9 @@ n_expressed <- sum(expressed_genes)
 
 ## 1b. Library size comparison across all samples
 
-![Library size boxplot](1-figures/quality_control/lib_size_boxplot.svg)
+<p align="center">
+  <img src="1-figures/quality_control/lib_size_boxplot.svg" alt="Library size boxplot" width="75%">
+</p>
 
 All samples appear to share similar library sizes, so there are 
 
