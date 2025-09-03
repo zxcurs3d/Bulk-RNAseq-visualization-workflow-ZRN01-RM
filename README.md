@@ -1,10 +1,8 @@
-# Bulk RNA-seq Time-Course Workflow (QC, DGE, Functional Analysis): ZRN01 Example #1 Analysis Workflow (RM)
+# Bulk RNA-seq Time-Course Workflow: ZRN01 Example #1 Analysis (RM)
 
 Analysis and pipeline by: Ha-Na Shim 
 
 For any inquiries or suggestions to the below pipeline, my email is: hshim1@uchicago.edu
-
-## About this repository
 
 <h2 id="about-this-repository">About this repository</h2>
 
