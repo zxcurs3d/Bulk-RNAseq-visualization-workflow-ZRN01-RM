@@ -353,3 +353,8 @@ For QC purposes, this plot is likely superfluous/unnecessary. Regardless, sample
     <img src="1-figures/differential_gene_expression/combined_lineplots_grid.svg" alt="Combined lineplots grid" width="700">
   </a>
 </p>
+
+## GSEA of custom GO lists
+
+
+## CPM boxplots for genes of interest
