@@ -359,6 +359,16 @@ For QC purposes, this plot is likely superfluous/unnecessary. Regardless, sample
   </a>
 </p>
 
+## Heatmap of clustered gene expression and aggregate expression of each hierarchically clustered module
+<p align="center">
+  <a href="1-figures/differential_gene_expression/heatmap_top1000var.svg">
+    <img src="1-figures/differential_gene_expression/heatmap_top1000var.svg" alt="Heatmap of top 1000 variable genes" width="48%">
+  </a>
+  <a href="1-figures/differential_gene_expression/top500_variable_genes_lineplots.svg">
+    <img src="1-figures/differential_gene_expression/top500_variable_genes_lineplots.svg" alt="Lineplots of top 500 variable genes" width="48%">
+  </a>
+</p>
+
 ## GSEA of custom GO lists
 
 ## CPM boxplots for genes of interest
