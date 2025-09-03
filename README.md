@@ -74,7 +74,7 @@
 
 ### Required packages and R version
 
-_These are all packages that are required to generate visualizations and for the analysis workflow outlined below._ 
+<p><em>The following packages are required to run the workflow and generate the visualizations below.</em></p>
 
 **R ≥ 4.5.1** (released 2025-06-13). 
 **Bioconductor ≥ 3.21** (works with R 4.5.x)
