@@ -1,0 +1,1464 @@
+---
+title: "1-preprocessing-and-quality-control"
+output: html_document
+date: "2025-08-31"
+---
+
+```{r load required packages}
+
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(scales)
+library(showtext)
+library(edgeR)
+library(DESeq2)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(tidyverse)
+library(ggrepel)
+library(PCAtools)
+library(DESeq2)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(gridExtra)
+library(dendextend)
+library(ggplot2)
+library(dplyr)
+library(ggdendro)
+library(svglite)
+library(RColorBrewer)
+library(biomaRt)
+library(patchwork)
+
+font_add("Helvetica Neue", "font/HelveticaNeueLight.otf")
+showtext_auto()
+
+```
+
+```{r}
+
+### table of contents ###
+
+
+
+
+
+
+
+
+
+
+```
+
+
+```{r edgeR cpm distribution filtering}
+
+# Load data --------------------------------------------------------------------
+rm_metadata <- readRDS('1-source-files/RM_metadata.RDS')
+rm_raw_counts <- readRDS('1-source-files/RM_filt_raw_counts.RDS')
+
+# Calculate CPM using edgeR
+cpm_matrix <- cpm(rm_raw_counts)
+
+# Check dimensions
+dim(cpm_matrix)
+
+# Summary statistics
+summary(as.vector(cpm_matrix))
+
+# Create histogram of CPM values
+# Convert to long format for plotting
+cpm_long <- as.data.frame(cpm_matrix) %>%
+  pivot_longer(cols = everything(), 
+               names_to = "sample", 
+               values_to = "cpm")
+
+cpm_subset <- cpm_long %>%
+  filter(sample %in% sample(unique(sample), min(20, length(unique(sample)))))
+
+# Calculate filtering metrics
+total_genes <- nrow(cpm_matrix)
+expressed_genes <- rowSums(cpm_matrix > 3) >= 3
+n_expressed <- sum(expressed_genes)
+
+# After filtering histogram
+cpm_filtered <- cpm_matrix[expressed_genes, ]
+cpm_filtered_long <- as.data.frame(cpm_filtered) %>%
+  pivot_longer(cols = everything(),
+               names_to = "sample",
+               values_to = "cpm")
+
+# Create density plot after filtering
+cpm_filtered_subset <- cpm_filtered_long %>%
+  dplyr::filter(sample %in% sample(unique(sample), min(20, length(unique(sample)))))
+
+
+# visualization option 1
+
+qc_f1 <- ggplot(cpm_subset, aes(x = log10(cpm + 1), color = sample)) +
+  geom_density(alpha = 0.5, linewidth = 0.5) +
+  labs(x = "log10(CPM + 1)", y = "Density",
+       title = "log10(CPM+1) distribution across all sample") +
+  theme_bw(base_family = "Helvetica Neue") +
+  theme(legend.position = "none",
+        plot.title = element_text(size = 12, face = "bold"),
+        axis.title = element_text(size = 12),
+        axis.text = element_text(size = 10),
+        panel.grid.minor = element_blank())
+
+print(qc_f1)
+
+qc_f2 <- ggplot(cpm_filtered_subset, aes(x = log10(cpm + 1), color = sample)) +
+  geom_density(alpha = 0.5, linewidth = 0.5) +
+  labs(x = "log10(CPM + 1)", y = "Density",
+       title = "log10(CPM+1) distribution after filtering (CPM > 3 in ≥3 samples)") +
+  theme_bw(base_family = "Helvetica Neue") +
+  theme(legend.position = "none",
+        plot.title = element_text(size = 12, face = "bold"),
+        axis.title = element_text(size = 12),
+        axis.text = element_text(size = 10),
+        panel.grid.minor = element_blank())
+
+print(qc_f2)
+
+qc_f1_f2_comb <- qc_f1 / qc_f2
+print(qc_f1_f2_comb)
+
+ggsave('1-figures/quality_control/qc_f1_f2_comb.svg',qc_f1_f2_comb,width=5,height=5,dpi=500)
+
+# visualization option 2
+
+# Before filtering histogram
+qc_f3 <- ggplot(cpm_long, aes(x = log10(cpm + 1))) +
+  geom_histogram(bins = 100, fill = "#4A90E2", alpha = 0.7, color = NA) +
+  geom_vline(xintercept = log10(3 + 1), linetype = "dashed", 
+             color = "red", linewidth = 0.5, alpha = 0.8) +
+  annotate("text", x = max(log10(cpm_long$cpm + 1)) * 0.7, 
+           y = Inf, vjust = 2,
+           label = paste0("Total genes: ", format(total_genes, big.mark = ",")),
+           family = "Helvetica Neue", size = 4) +
+  labs(x = "log10(CPM + 1)", y = "Frequency",
+       title = "Before filtering") +
+  theme_minimal(base_family = "Helvetica Neue") +
+  theme(plot.title = element_text(size = 12, face = "bold"),
+        axis.title = element_text(size = 12),
+        axis.text = element_text(size = 10),
+        panel.grid.minor = element_blank())
+
+qc_f4 <- ggplot(cpm_filtered_long, aes(x = log10(cpm + 1))) +
+  geom_histogram(bins = 100, fill = "#2ECC71", alpha = 0.7, color = NA) +
+  geom_vline(xintercept = log10(3 + 1), linetype = "dashed",
+             color = "red", linewidth = 0.5, alpha = 0.8) +
+  annotate("text", x = max(log10(cpm_filtered_long$cpm + 1)) * 0.7,
+           y = Inf, vjust = 2,
+           label = paste0("Filtered genes: ", format(n_expressed, big.mark = ",")),
+           family = "Helvetica Neue", size = 4) +
+  labs(x = "log10(CPM + 1)", y = "Frequency",
+       title = "After filtering (CPM > 3 in ≥3 samples)") +
+  theme_minimal(base_family = "Helvetica Neue") +
+  theme(plot.title = element_text(size = 12, face = "bold"),
+        axis.title = element_text(size = 12),
+        axis.text = element_text(size = 10),
+        panel.grid.minor = element_blank())
+
+qc_f3_f4_comb <- qc_f3 / qc_f4
+print(qc_f3_f4_comb)
+
+ggsave('1-figures/quality_control/qc_f3_f4_comb.svg',qc_f3_f4_comb,width=5,height=5,dpi=500)
+
+rm_raw_counts_filtered <- rm_raw_counts[expressed_genes, ]
+saveRDS(rm_raw_counts_filtered, '2-data/rm_raw_counts_filtered_CPM3.RDS')
+
+```
+
+
+
+```{r deseq2 preprocessing}
+
+# ==============================================================================
+# Title: DESeq2 Preprocessing Pipeline for Respiratory Mesenchyme (RM) RNA-seq
+# Author: Ha-Na Shim
+# Date: August 11, 2024
+# Version: 4.2
+# Description: DESeq2 analysis pipeline for RM RNA-seq data including 
+#              normalization and variance stabilized transformation
+# ==============================================================================
+
+# Load data --------------------------------------------------------------------
+rm_metadata <- readRDS('1-source-files/RM_metadata.RDS')
+rm_raw_counts <- readRDS('2-data/rm_raw_counts_filtered_CPM3.RDS')
+
+# Data validation --------------------------------------------------------------
+stopifnot(
+  "Sample order mismatch" = all(colnames(rm_raw_counts) == rownames(rm_metadata)),
+  "Missing group column" = "group" %in% colnames(rm_metadata)
+)
+
+# Pre-filtering ----------------------------------------------------------------
+cpm_matrix <- cpm(rm_raw_counts)
+n_genes_before <- nrow(rm_raw_counts)
+expressed_genes <- rowSums(cpm_matrix > 3) >= 3
+rm_raw_counts <- rm_raw_counts[expressed_genes, ]
+n_genes_after <- nrow(rm_raw_counts)
+
+cat(sprintf("Genes before filtering: %d\n", n_genes_before))
+cat(sprintf("Genes after filtering: %d\n", n_genes_after))
+
+# DESeq2 analysis --------------------------------------------------------------
+# Create DESeqDataSet with group design
+dds_rm <- DESeq2::DESeqDataSetFromMatrix(
+  countData = rm_raw_counts,
+  colData = rm_metadata,
+  design = ~ group
+)
+
+# Add size factors
+dds_rm <- DESeq2::estimateSizeFactors(dds_rm)
+
+# Estimate dispersions
+dds_rm <- DESeq2::estimateDispersions(dds_rm)
+
+# Run DESeq2 differential expression analysis
+dds_rm <- DESeq2::DESeq(dds_rm)
+
+# Generate normalized counts ---------------------------------------------------
+# Extract normalized counts
+rm_normalized_counts <- DESeq2::counts(dds_rm, normalized = TRUE)
+
+# Variance stabilized transformation
+vst_rm <- DESeq2::vst(dds_rm, blind = FALSE)
+rm_vst_counts <- SummarizedExperiment::assay(vst_rm)
+
+# lfc shrinkage
+
+# Day 4: SM_D4_T21_ctrl vs SM_D4_D21_ctrl (D21 as reference)
+dds_day4 <- dds_rm
+dds_day4$group <- relevel(dds_day4$group, ref = "SM_D4_D21_ctrl")
+dds_day4 <- DESeq(dds_day4)
+resultsNames(dds_day4)  # Verify the coefficient name
+
+deg_day4_apeglm <- lfcShrink(dds_day4,
+                             coef = "group_SM_D4_T21_ctrl_vs_SM_D4_D21_ctrl",
+                             type = "apeglm")
+deg_day4 <- as.data.frame(deg_day4_apeglm) %>%
+  tibble::rownames_to_column("gene_id") %>%
+  dplyr::arrange(padj)
+saveRDS(deg_day4, "deg_day4_T21_vs_D21_apeglm.RDS")
+
+
+# Day 7: RM_D7_T21_ctrl vs RM_D7_D21_ctrl (D21 as reference)
+dds_day7 <- dds_rm
+dds_day7$group <- relevel(dds_day7$group, ref = "RM_D7_D21_ctrl")
+dds_day7 <- DESeq(dds_day7)
+resultsNames(dds_day7)
+
+deg_day7_apeglm <- lfcShrink(dds_day7,
+                             coef = "group_RM_D7_T21_ctrl_vs_RM_D7_D21_ctrl",
+                             type = "apeglm")
+deg_day7 <- as.data.frame(deg_day7_apeglm) %>%
+  tibble::rownames_to_column("gene_id") %>%
+  dplyr::arrange(padj)
+saveRDS(deg_day7, "deg_day7_T21_vs_D21_apeglm.RDS")
+
+# Day 10: RM_D10_T21_ctrl vs RM_D10_D21_ctrl (D21 as reference)
+dds_day10 <- dds_rm
+dds_day10$group <- relevel(dds_day10$group, ref = "RM_D10_D21_ctrl")
+dds_day10 <- DESeq(dds_day10)
+resultsNames(dds_day10)
+
+deg_day10_apeglm <- lfcShrink(dds_day10,
+                              coef = "group_RM_D10_T21_ctrl_vs_RM_D10_D21_ctrl",
+                              type = "apeglm")
+deg_day10 <- as.data.frame(deg_day10_apeglm) %>%
+  tibble::rownames_to_column("gene_id") %>%
+  dplyr::arrange(padj)
+saveRDS(deg_day10, "deg_day10_T21_vs_D21_apeglm.RDS")
+
+# Day 15: RM_D15_T21_ctrl vs RM_D15_D21_ctrl (D21 as reference)
+dds_day15 <- dds_rm
+dds_day15$group <- relevel(dds_day15$group, ref = "RM_D15_D21_ctrl")
+dds_day15 <- DESeq(dds_day15)
+resultsNames(dds_day15)
+
+deg_day15_apeglm <- lfcShrink(dds_day15,
+                              coef = "group_RM_D15_T21_ctrl_vs_RM_D15_D21_ctrl",
+                              type = "apeglm")
+deg_day15 <- as.data.frame(deg_day15_apeglm) %>%
+  tibble::rownames_to_column("gene_id") %>%
+  dplyr::arrange(padj)
+saveRDS(deg_day15, "deg_day15_T21_vs_D21_apeglm.RDS")
+
+```
+
+```{r deseq2 no log2foldchange shrinkage}
+
+# ==============================================================================
+# Title: DESeq2 Preprocessing Pipeline for Respiratory Mesenchyme (RM) RNA-seq
+# Author: Ha-Na Shim
+# Date: August 11, 2024
+# Version: 4.2
+# Description: DESeq2 analysis pipeline for RM RNA-seq data including 
+#              normalization and variance stabilized transformation
+# ==============================================================================
+
+# Load data --------------------------------------------------------------------
+rm_metadata <- readRDS('1-source-files/RM_metadata.RDS')
+rm_raw_counts <- readRDS('2-data/rm_raw_counts_filtered_CPM3.RDS')
+
+# Data validation --------------------------------------------------------------
+stopifnot(
+  "Sample order mismatch" = all(colnames(rm_raw_counts) == rownames(rm_metadata)),
+  "Missing group column" = "group" %in% colnames(rm_metadata)
+)
+
+# Pre-filtering ----------------------------------------------------------------
+cpm_matrix <- cpm(rm_raw_counts)
+n_genes_before <- nrow(rm_raw_counts)
+expressed_genes <- rowSums(cpm_matrix > 3) >= 3
+rm_raw_counts <- rm_raw_counts[expressed_genes, ]
+n_genes_after <- nrow(rm_raw_counts)
+
+cat(sprintf("Genes before filtering: %d\n", n_genes_before))
+cat(sprintf("Genes after filtering: %d\n", n_genes_after))
+
+# DESeq2 analysis --------------------------------------------------------------
+# Create DESeqDataSet with group design
+dds_rm <- DESeq2::DESeqDataSetFromMatrix(
+  countData = rm_raw_counts,
+  colData = rm_metadata,
+  design = ~ group
+)
+
+# Add size factors
+dds_rm <- DESeq2::estimateSizeFactors(dds_rm)
+
+# Estimate dispersions
+dds_rm <- DESeq2::estimateDispersions(dds_rm)
+
+# Run DESeq2 differential expression analysis
+dds_rm <- DESeq2::DESeq(dds_rm)
+
+# Generate normalized counts ---------------------------------------------------
+# Extract normalized counts
+rm_normalized_counts <- DESeq2::counts(dds_rm, normalized = TRUE)
+
+# Variance stabilized transformation
+vst_rm <- DESeq2::vst(dds_rm, blind = FALSE)
+rm_vst_counts <- SummarizedExperiment::assay(vst_rm)
+
+# Day 4: SM_D4_T21_ctrl vs SM_D4_D21_ctrl (D21 as reference)
+dds_day4 <- dds_rm
+dds_day4$group <- relevel(dds_day4$group, ref = "SM_D4_D21_ctrl")
+dds_day4 <- DESeq(dds_day4)
+resultsNames(dds_day4)
+
+deg_day4_noshrink <- results(dds_day4, 
+                             name = "group_SM_D4_T21_ctrl_vs_SM_D4_D21_ctrl")
+deg_day4_noshrink_df <- as.data.frame(deg_day4_noshrink) %>%
+  tibble::rownames_to_column("gene_id") %>%
+  dplyr::arrange(padj)
+saveRDS(deg_day4_noshrink_df, "deg_day4_T21_vs_D21_noshrink.RDS")
+
+# Day 7: RM_D7_T21_ctrl vs RM_D7_D21_ctrl (D21 as reference)
+dds_day7 <- dds_rm
+dds_day7$group <- relevel(dds_day7$group, ref = "RM_D7_D21_ctrl")
+dds_day7 <- DESeq(dds_day7)
+resultsNames(dds_day7)
+
+deg_day7_noshrink <- results(dds_day7,
+                             name = "group_RM_D7_T21_ctrl_vs_RM_D7_D21_ctrl")
+deg_day7_noshrink_df <- as.data.frame(deg_day7_noshrink) %>%
+  tibble::rownames_to_column("gene_id") %>%
+  dplyr::arrange(padj)
+saveRDS(deg_day7_noshrink_df, "deg_day7_T21_vs_D21_noshrink.RDS")
+
+# Day 10: RM_D10_T21_ctrl vs RM_D10_D21_ctrl (D21 as reference)
+dds_day10 <- dds_rm
+dds_day10$group <- relevel(dds_day10$group, ref = "RM_D10_D21_ctrl")
+dds_day10 <- DESeq(dds_day10)
+resultsNames(dds_day10)
+
+deg_day10_noshrink <- results(dds_day10,
+                              name = "group_RM_D10_T21_ctrl_vs_RM_D10_D21_ctrl")
+deg_day10_noshrink_df <- as.data.frame(deg_day10_noshrink) %>%
+  tibble::rownames_to_column("gene_id") %>%
+  dplyr::arrange(padj)
+saveRDS(deg_day10_noshrink_df, "deg_day10_T21_vs_D21_noshrink.RDS")
+
+# Day 15: RM_D15_T21_ctrl vs RM_D15_D21_ctrl (D21 as reference)
+dds_day15 <- dds_rm
+dds_day15$group <- relevel(dds_day15$group, ref = "RM_D15_D21_ctrl")
+dds_day15 <- DESeq(dds_day15)
+resultsNames(dds_day15)
+
+deg_day15_noshrink <- results(dds_day15,
+                              name = "group_RM_D15_T21_ctrl_vs_RM_D15_D21_ctrl")
+deg_day15_noshrink_df <- as.data.frame(deg_day15_noshrink) %>%
+  tibble::rownames_to_column("gene_id") %>%
+  dplyr::arrange(padj)
+saveRDS(deg_day15_noshrink_df, "deg_day15_T21_vs_D21_noshrink.RDS")
+
+```
+
+```{r scatterplots comparing apeglm shrinkage vs no shrinkage}
+
+
+.theil_sen <- function(x, y) {
+  idx <- utils::combn(seq_along(x), 2)
+  dx  <- x[idx[2, ]] - x[idx[1, ]]
+  dy  <- y[idx[2, ]] - y[idx[1, ]]
+  slopes <- dy[dx != 0] / dx[dx != 0]
+  median(slopes, na.rm = TRUE)
+}
+
+create_scatterplot <- function(data1,
+                               data2,
+                               x_label = NULL,
+                               y_label = NULL,
+                               log2FoldChange_cut = 0,
+                               xmax = 15,
+                               ymax = 15,
+                               alpha_points = 0.80,
+                               use_both_sig_only = TRUE) {
+  
+  if (is.null(x_label))
+    x_label <- paste0("log2FoldChange (", deparse(substitute(data1)), ")")
+  if (is.null(y_label))
+    y_label <- paste0("log2FoldChange (", deparse(substitute(data2)), ")")
+  
+  merged_data <- merge(data1, data2, by = "gene_id") %>%
+    dplyr::mutate(
+      Significance = dplyr::case_when(
+        padj.x < 0.05 & padj.y < 0.05 ~ "Both",
+        padj.x < 0.05 & padj.y >= 0.05 ~ "Data1_only",
+        padj.y < 0.05 & padj.x >= 0.05 ~ "Data2_only",
+        TRUE ~ "Neither"
+      )
+    )
+  
+  corr_df <- if (use_both_sig_only) {
+    dplyr::filter(merged_data, Significance == "Both")
+  } else merged_data
+  
+  pear <- stats::cor.test(corr_df$log2FoldChange.x,
+                          corr_df$log2FoldChange.y,
+                          method = "pearson")
+  spea <- stats::cor.test(corr_df$log2FoldChange.x,
+                          corr_df$log2FoldChange.y,
+                          method = "spearman")
+  ts_slope <- .theil_sen(corr_df$log2FoldChange.x, corr_df$log2FoldChange.y)
+  
+  stats_tbl <- tibble::tibble(
+    Metric = c("Pearson_r", "Pearson_p", "R_squared",
+               "Spearman_rho", "Spearman_p", "Theil_Sen_slope"),
+    Value = c(pear$estimate, pear$p.value, pear$estimate^2,
+              spea$estimate, spea$p.value, ts_slope)
+  )
+  
+  sig_q <- dplyr::filter(merged_data, Significance == "Both")
+  q1 <- sum(sig_q$log2FoldChange.x >= log2FoldChange_cut &
+              sig_q$log2FoldChange.y >= log2FoldChange_cut)
+  q2 <- sum(sig_q$log2FoldChange.x <= -log2FoldChange_cut &
+              sig_q$log2FoldChange.y >= log2FoldChange_cut)
+  q3 <- sum(sig_q$log2FoldChange.x <= -log2FoldChange_cut &
+              sig_q$log2FoldChange.y <= -log2FoldChange_cut)
+  q4 <- sum(sig_q$log2FoldChange.x >= log2FoldChange_cut &
+              sig_q$log2FoldChange.y <= -log2FoldChange_cut)
+  
+  ann_df <- tibble::tibble(
+    x = c(xmax*0.8, xmax*0.8, -xmax*0.8, -xmax*0.8),
+    y = c(ymax*0.8, -ymax*0.8, ymax*0.8, -ymax*0.8),
+    label = c(q1, q4, q2, q3),
+    hjust = c(1, 1, 0, 0)
+  )
+  
+  sig_colors <- c(
+    Both = "red3",
+    Data1_only = "royalblue3",
+    Data2_only = "#8A00C4",
+    Neither = "grey75"
+  )
+  
+  id_start <- max(-xmax, min(corr_df$log2FoldChange.x, na.rm = TRUE))
+  id_end <- min(xmax, max(corr_df$log2FoldChange.x, na.rm = TRUE))
+  
+  p <- ggplot(merged_data,
+              aes(x = log2FoldChange.x,
+                  y = log2FoldChange.y,
+                  colour = Significance)) +
+    geom_hline(yintercept = 0, linewidth = 0.20) +
+    geom_vline(xintercept = 0, linewidth = 0.20) +
+    geom_segment(data = data.frame(x = id_start, y = id_start,
+                                   xend = id_end, yend = id_end),
+                 aes(x = x, y = y, xend = xend, yend = yend),
+                 inherit.aes = FALSE,
+                 colour = "black", linetype = "dashed",
+                 linewidth = 0.5) +
+    geom_point(alpha = alpha_points, size = 1.2) +
+    geom_smooth(data = corr_df,
+                method = "lm", se = FALSE,
+                colour = "black", linewidth = 0.6) +
+    scale_colour_manual(values = sig_colors, name = NULL) +
+    coord_cartesian(xlim = c(-xmax, xmax), ylim = c(-ymax, ymax)) +
+    labs(x = x_label, y = y_label) +
+    geom_label(data = ann_df,
+               aes(x = x, y = y, label = label, hjust = hjust),
+               size = 5.5, colour = "red3", fill = "white",
+               family = "Helvetica Neue") +
+    theme_minimal(base_size = 14, base_family = "Helvetica Neue") +
+    theme(
+      legend.position = "none",
+      axis.title = element_text(size = 12, family = "Helvetica Neue"),
+      axis.text = element_text(size = 11, family = "Helvetica Neue")
+    ) +
+    geom_text(
+      data = data.frame(x = -xmax + 0.01, y = ymax - 0.01),
+      aes(x = x, y = y), inherit.aes = FALSE,
+      label = paste0("ρ = ", sprintf("%.2f", spea$estimate),
+                     "; p = ", formatC(spea$p.value, format = "e", digits = 1)),
+      family = "Helvetica Neue",
+      hjust = 0, vjust = 1, size = 4
+    )
+  
+  print(p)
+  invisible(list(plot = p, statistics = stats_tbl))
+}
+
+
+
+
+
+library(ggplot2)
+library(dplyr)
+library(patchwork)
+
+# Load the shrunken (apeglm) data
+deg_day4_shrunk <- readRDS('deg_day4_T21_vs_D21_apeglm.RDS')
+deg_day7_shrunk <- readRDS('deg_day7_T21_vs_D21_apeglm.RDS')
+deg_day10_shrunk <- readRDS('deg_day10_T21_vs_D21_apeglm.RDS')
+deg_day15_shrunk <- readRDS('deg_day15_T21_vs_D21_apeglm.RDS')
+
+# Load the non-shrunken data
+deg_day4_noshrink <- readRDS('deg_day4_T21_vs_D21_noshrink.RDS')
+deg_day7_noshrink <- readRDS('deg_day7_T21_vs_D21_noshrink.RDS')
+deg_day10_noshrink <- readRDS('deg_day10_T21_vs_D21_noshrink.RDS')
+deg_day15_noshrink <- readRDS('deg_day15_T21_vs_D21_noshrink.RDS')
+
+# Create scatterplots comparing shrinkage methods
+p1 <- create_scatterplot(
+  data1 = deg_day4_noshrink,
+  data2 = deg_day4_shrunk,
+  x_label = "log2FC (No Shrinkage)",
+  y_label = "log2FC (apeglm)",
+  log2FoldChange_cut = 0.5,
+  xmax = 10,
+  ymax = 10,
+  alpha_points = 0.6,
+  use_both_sig_only = FALSE
+)
+
+p2 <- create_scatterplot(
+  data1 = deg_day7_noshrink,
+  data2 = deg_day7_shrunk,
+  x_label = "log2FC (No Shrinkage)",
+  y_label = "log2FC (apeglm)",
+  log2FoldChange_cut = 0.5,
+  xmax = 10,
+  ymax = 10,
+  alpha_points = 0.6,
+  use_both_sig_only = FALSE
+)
+
+p3 <- create_scatterplot(
+  data1 = deg_day10_noshrink,
+  data2 = deg_day10_shrunk,
+  x_label = "log2FC (No Shrinkage)",
+  y_label = "log2FC (apeglm)",
+  log2FoldChange_cut = 0.5,
+  xmax = 10,
+  ymax = 10,
+  alpha_points = 0.6,
+  use_both_sig_only = FALSE
+)
+
+p4 <- create_scatterplot(
+  data1 = deg_day15_noshrink,
+  data2 = deg_day15_shrunk,
+  x_label = "log2FC (No Shrinkage)",
+  y_label = "log2FC (apeglm)",
+  log2FoldChange_cut = 0.5,
+  xmax = 10,
+  ymax = 10,
+  alpha_points = 0.6,
+  use_both_sig_only = FALSE
+)
+
+# Add titles to each plot
+plot1 <- p1$plot + ggtitle("Day 4: T21 vs D21") + 
+  theme(plot.title = element_text(size = 14, hjust = 0.5, face = "bold", family = "Helvetica Neue"))
+
+plot2 <- p2$plot + ggtitle("Day 7: T21 vs D21") + 
+  theme(plot.title = element_text(size = 14, hjust = 0.5, face = "bold", family = "Helvetica Neue"))
+
+plot3 <- p3$plot + ggtitle("Day 10: T21 vs D21") + 
+  theme(plot.title = element_text(size = 14, hjust = 0.5, face = "bold", family = "Helvetica Neue"))
+
+plot4 <- p4$plot + ggtitle("Day 15: T21 vs D21") + 
+  theme(plot.title = element_text(size = 14, hjust = 0.5, face = "bold", family = "Helvetica Neue"))
+
+# Combine plots in 2x2 grid
+shrinkage_comparison <- (plot1 | plot2) / (plot3 | plot4) +
+  plot_annotation(
+    title = "Log2 Fold Change Shrinkage Comparison",
+    subtitle = "apeglm shrinkage vs. no shrinkage",
+    theme = theme(
+      plot.title = element_text(size = 18, face = "bold", hjust = 0.5, family = "Helvetica Neue"),
+      plot.subtitle = element_text(size = 14, hjust = 0.5, family = "Helvetica Neue")
+    )
+  )
+
+print(shrinkage_comparison)
+
+# Save the combined plot
+ggsave("1-figures/quality_control/shrinkage_comparison.svg", 
+       plot = shrinkage_comparison, 
+       width = 12, 
+       height = 12, 
+       dpi = 300)
+
+```
+
+```{r barplot of library size per sample}
+
+# ==============================================================================
+# Title: Per-Sample Gene Count Distribution
+# Author: Ha-Na Shim
+# Date: August 2024
+# Description: Boxplot showing distribution of gene counts within each sample
+#              for quality control assessment
+# ==============================================================================
+
+# Load data --------------------------------------------------------------------
+rm_metadata <- readRDS('1-source-files/RM_metadata.RDS')
+rm_raw_counts <- readRDS('1-source-files/RM_filt_raw_counts.RDS')
+
+# Transform to log2(counts + 1) for visualization
+log_counts <- log2(rm_raw_counts + 1)
+
+# Convert to long format for ggplot -------------------------------------------
+counts_long <- log_counts %>%
+  as.data.frame() %>%
+  tidyr::pivot_longer(
+    cols = everything(),
+    names_to = "sample",
+    values_to = "log2_count"
+  )
+
+# Add metadata
+counts_long <- counts_long %>%
+  dplyr::left_join(
+    rm_metadata %>%
+      tibble::rownames_to_column("sample") %>%
+      dplyr::select(sample, timepoint, genotype),
+    by = "sample"
+  ) %>%
+  dplyr::mutate(
+    timepoint_factor = factor(paste0("D", timepoint), levels = c("D4", "D7", "D10", "D15"))
+  )
+
+# Define colors
+timepoint_colors <- c(
+  "D4" = "#E41A1C",
+  "D7" = "#377EB8",
+  "D10" = "#4DAF4A",
+  "D15" = "#984EA3"
+)
+
+# Create per-sample boxplot ---------------------------------------------------
+lib_size_boxplot <- ggplot(counts_long, aes(x = sample, y = log2_count, fill = timepoint_factor)) +
+  geom_boxplot(
+    outlier.shape = NA,
+    alpha = 0.7,
+    width = 0.8,
+    staplewidth = 0.5
+  ) +
+  scale_fill_manual(
+    values = timepoint_colors,
+    name = "Timepoint"
+  ) +
+  scale_y_continuous(
+    breaks = seq(0, 20, by = 2),
+    expand = expansion(mult = c(0.02, 0.02))
+  ) +
+  labs(
+    title = "Log-transformed gene expression across all RM RNAseq samples",
+    x = "Sample ID",
+    y = expression(log[2](raw_counts + 1))
+  ) +
+  theme_bw() +
+  theme(
+    text = element_text(family = "Helvetica Neue"),
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5, family = "Helvetica Neue"),
+    axis.title = element_text(size = 14, face = "bold", family = "Helvetica Neue"),
+    axis.text.x = element_text(size = 8, angle = 45, hjust = 1, family = "Helvetica Neue"),
+    axis.text.y = element_text(size = 10, family = "Helvetica Neue"),
+    legend.title = element_text(size = 12, face = "bold", family = "Helvetica Neue"),
+    legend.text = element_text(size = 10, family = "Helvetica Neue"),
+    panel.grid.major.x = element_blank()
+  )
+
+# Display plot
+print(lib_size_boxplot)
+
+ggsave('1-figures/quality_control/lib_size_boxplot.svg',lib_size_boxplot,width=7,height=5,dpi=500)
+
+
+```
+
+```{r distribution of pvalues across 4 degs lists}
+library(ggplot2)
+library(dplyr)
+library(patchwork)
+
+deg_day4 <- readRDS('deg_day4_T21_vs_D21_apeglm.RDS')
+deg_day7 <- readRDS('deg_day7_T21_vs_D21_apeglm.RDS')
+deg_day10 <- readRDS('deg_day10_T21_vs_D21_apeglm.RDS')
+deg_day15 <- readRDS('deg_day15_T21_vs_D21_apeglm.RDS')
+
+create_pval_histogram <- function(deg_df, day_label) {
+  n_sig <- sum(deg_df$pvalue < 0.05, na.rm = TRUE)
+  n_nonsig <- sum(deg_df$pvalue >= 0.05, na.rm = TRUE)
+  n_na <- sum(is.na(deg_df$pvalue))
+  
+  # Calculate y-limit to cut off the peak
+  hist_data <- hist(deg_df$pvalue[!is.na(deg_df$pvalue)], 
+                     breaks = seq(0, 1, 0.02), plot = FALSE)
+  y_max <- sort(hist_data$counts, decreasing = TRUE)[2] * 1.5  # Use second highest bar * 1.5
+  
+  p <- ggplot(deg_df %>% dplyr::filter(!is.na(pvalue)), 
+              aes(x = pvalue)) +
+    geom_histogram(breaks = seq(0, 1, 0.02), 
+                   fill = "#377EB8", alpha = 0.8, 
+                   color = "white", size = 0.2) +
+    geom_vline(xintercept = 0.05, color = "red", 
+               linetype = "dashed", size = 0.8) +
+    annotate("text", x = 0.5, y = y_max * 0.9,
+             label = paste0("p < 0.05: n = ", format(n_sig, big.mark = ",")),
+             family = "Helvetica Neue", size = 3.5, color = "#2E7D32") +
+    annotate("text", x = 0.5, y = y_max * 0.75,
+             label = paste0("p ≥ 0.05: n = ", format(n_nonsig, big.mark = ",")),
+             family = "Helvetica Neue", size = 3.5, color = "#666666") +
+    scale_x_reverse(breaks = seq(1, 0, -0.2), limits = c(1, 0)) +  # Reversed x-axis
+    coord_cartesian(ylim = c(0, y_max)) +  # Cut off the peak
+    labs(x = "p-value", 
+         y = "Frequency",
+         title = paste0("Day ", day_label, ": T21 vs D21")) +
+    theme_minimal(base_family = "Helvetica Neue") +
+    theme(plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+          axis.title = element_text(size = 11),
+          axis.text = element_text(size = 9),
+          panel.grid.minor = element_blank(),
+          panel.grid.major.x = element_blank())
+  
+  return(p)
+}
+
+p_day4 <- create_pval_histogram(deg_day4, "4")
+p_day7 <- create_pval_histogram(deg_day7, "7")
+p_day10 <- create_pval_histogram(deg_day10, "10")
+p_day15 <- create_pval_histogram(deg_day15, "15")
+
+pval_combined <- (p_day4 | p_day7) / (p_day10 | p_day15) +
+  plot_annotation(
+    title = "P-value Distributions Across Timepoints",
+    subtitle = "DESeq2 Differential Expression Analysis with apeglm Shrinkage",
+    theme = theme(
+      plot.title = element_text(size = 16, face = "bold", 
+                                family = "Helvetica Neue", hjust = 0.5),
+      plot.subtitle = element_text(size = 12, 
+                                   family = "Helvetica Neue", hjust = 0.5)
+    )
+  )
+
+print(pval_combined)
+
+ggsave('1-figures/quality_control/pvalue_distributions.svg', 
+       pval_combined, width = 10, height = 8, dpi = 500)
+
+```
+
+```{r assessment of normalization}
+
+# ==============================================================================
+# Title: RLE Plot for Normalization Quality Control
+# Author: Ha-Na Shim
+# Date: August 11, 2024
+# Version: 4.2
+# Description: Relative Log Expression plot to assess normalization quality
+# ==============================================================================
+
+# Load data and DESeq2 object -------------------------------------------------
+rm_metadata <- readRDS('1-source-files/RM_metadata.RDS')
+rm_raw_counts <- readRDS('1-source-files/RM_filt_raw_counts.RDS')
+
+# Pre-filtering
+min_count <- 10
+min_samples <- 3
+keep_genes <- rowSums(rm_raw_counts >= min_count) >= min_samples
+rm_counts_filtered <- rm_raw_counts[keep_genes, ]
+
+# Create DESeq2 object
+dds_rm <- DESeq2::DESeqDataSetFromMatrix(
+  countData = rm_counts_filtered,
+  colData = rm_metadata,
+  design = ~ group
+)
+
+dds_rm <- DESeq2::estimateSizeFactors(dds_rm)
+
+# Get different count matrices for comparison ---------------------------------
+raw_counts <- counts(dds_rm, normalized = FALSE)
+normalized_counts <- counts(dds_rm, normalized = TRUE)
+
+# Function to calculate RLE ---------------------------------------------------
+calculate_rle <- function(count_matrix, pseudocount = 1) {
+  count_matrix <- count_matrix + pseudocount
+  log_counts <- log2(count_matrix)
+  gene_medians <- apply(log_counts, 1, median)
+  rle_matrix <- sweep(log_counts, 1, gene_medians, "-")
+  return(rle_matrix)
+}
+
+# Calculate RLE for both raw and normalized -----------------------------------
+rle_raw <- calculate_rle(raw_counts)
+rle_normalized <- calculate_rle(normalized_counts)
+
+# Prepare data for plotting ----------------------------------------------------
+prepare_rle_data <- function(rle_matrix, count_type) {
+  rle_df <- as.data.frame(rle_matrix) %>%
+    tidyr::pivot_longer(
+      cols = everything(),
+      names_to = "sample",
+      values_to = "RLE"
+    ) %>%
+    dplyr::mutate(type = count_type)
+  return(rle_df)
+}
+
+rle_raw_df <- prepare_rle_data(rle_raw, "Raw Counts")
+rle_norm_df <- prepare_rle_data(rle_normalized, "Normalized Counts")
+
+# Add metadata
+rle_raw_df <- rle_raw_df %>%
+  dplyr::left_join(
+    rm_metadata %>% 
+      tibble::rownames_to_column("sample") %>%
+      dplyr::select(sample, timepoint, genotype),
+    by = "sample"
+  ) %>%
+  dplyr::mutate(timepoint_factor = factor(paste0("D", timepoint)))
+
+rle_norm_df <- rle_norm_df %>%
+  dplyr::left_join(
+    rm_metadata %>% 
+      tibble::rownames_to_column("sample") %>%
+      dplyr::select(sample, timepoint, genotype),
+    by = "sample"
+  ) %>%
+  dplyr::mutate(timepoint_factor = factor(paste0("D", timepoint)))
+
+# Define colors
+timepoint_colors <- c(
+  "D4" = "#E41A1C",
+  "D7" = "#377EB8",
+  "D10" = "#4DAF4A",
+  "D15" = "#984EA3"
+)
+
+# Create RLE plot for raw counts ----------------------------------------------
+rle_plot_raw <- ggplot(rle_raw_df, aes(x = sample, y = RLE, fill = timepoint_factor)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed", size = 0.5) +
+  scale_fill_manual(values = timepoint_colors, name = "Timepoint") +
+  ylim(-4, 4) +
+  labs(
+    title = "No size factor correction raw counts",
+    x = "Sample ID",
+    y = "Relative Log Expression"
+  ) +
+  theme_bw() +
+  theme(
+    text = element_text(family = "Helvetica Neue"),
+    plot.title = element_text(size = 14, face = "bold", hjust = 0),
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+    axis.text.y = element_text(size = 10),
+    legend.title = element_text(size = 11, face = "bold"),
+    legend.text = element_text(size = 10)
+  )
+
+# Create RLE plot for normalized counts ---------------------------------------
+rle_plot_normalized <- ggplot(rle_norm_df, aes(x = sample, y = RLE, fill = timepoint_factor)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed", size = 0.5) +
+  scale_fill_manual(values = timepoint_colors, name = "Timepoint") +
+  ylim(-4, 4) +
+  labs(
+    title = "Size factor corrected normalized counts",
+    x = "Sample ID",
+    y = "Relative Log Expression"
+  ) +
+  theme_bw() +
+  theme(
+    text = element_text(family = "Helvetica Neue"),
+    plot.title = element_text(size = 14, face = "bold", hjust = 0),
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+    axis.text.y = element_text(size = 10),
+    legend.title = element_text(size = 11, face = "bold"),
+    legend.text = element_text(size = 10)
+  )
+
+# Combine plots into grid -----------------------------------------------------
+combined_rle <- gridExtra::grid.arrange(
+  rle_plot_raw, 
+  rle_plot_normalized,
+  ncol = 1,
+  nrow = 2
+)
+
+rle_combined_fig <- rle_plot_raw / rle_plot_normalized
+
+ggsave('1-figures/quality_control/rle_combined_fig.svg',rle_combined_fig,width=7,height=7,dpi=500)
+
+# ==============================================================================
+# Title: Dispersion Plot for DESeq2 Normalization Quality Control
+# Author: Ha-Na Shim
+# Date: August 11, 2024
+# Version: 4.2
+# Description: Dispersion estimates plot showing mean-variance relationship
+# ==============================================================================
+
+# Load data and create DESeq2 object ------------------------------------------
+rm_metadata <- readRDS('1-source-files/RM_metadata.RDS')
+rm_raw_counts <- readRDS('1-source-files/RM_filt_raw_counts.RDS')
+
+# Pre-filtering
+min_count <- 10
+min_samples <- 3
+keep_genes <- rowSums(rm_raw_counts >= min_count) >= min_samples
+rm_counts_filtered <- rm_raw_counts[keep_genes, ]
+
+# Create and run DESeq2
+dds_rm <- DESeq2::DESeqDataSetFromMatrix(
+  countData = rm_counts_filtered,
+  colData = rm_metadata,
+  design = ~ group
+)
+
+dds_rm <- DESeq2::DESeq(dds_rm)
+
+# Method 2: Create custom ggplot version --------------------------------------
+# Extract dispersion data
+dispersions_df <- data.frame(
+  baseMean = mcols(dds_rm)$baseMean,
+  dispGeneEst = mcols(dds_rm)$dispGeneEst,
+  dispFit = mcols(dds_rm)$dispFit,
+  dispersion = dispersions(dds_rm)
+) %>%
+  dplyr::filter(baseMean > 0)
+
+# Create custom dispersion plot
+dispersion_plot <- ggplot(dispersions_df) +
+  # Gene-wise estimates (black points)
+  geom_point(
+    aes(x = baseMean, y = dispGeneEst),
+    size = 0.5,
+    alpha = 0.3,
+    color = "black"
+  ) +
+  # Final dispersions (blue points)
+  geom_point(
+    aes(x = baseMean, y = dispersion),
+    size = 0.5,
+    alpha = 0.5,
+    color = "dodgerblue"
+  ) +
+  # Fitted trend (red line)
+  geom_line(
+    aes(x = baseMean, y = dispFit),
+    color = "red",
+    size = 1.2
+  ) +
+  scale_x_log10(
+    breaks = trans_breaks("log10", function(x) 10^x),
+    labels = trans_format("log10", math_format(10^.x))
+  ) +
+  scale_y_log10(
+    breaks = trans_breaks("log10", function(x) 10^x),
+    labels = trans_format("log10", math_format(10^.x))
+  ) +
+  labs(
+    title = "Dispersion Estimates",
+    subtitle = "Black: gene estimates | Blue: shrunken dispersions | Red: fitted trend",
+    x = "Mean of Normalized Counts",
+    y = "Dispersion"
+  ) +
+  theme_bw() +
+  theme(
+    text = element_text(family = "Helvetica Neue"),
+    plot.title = element_text(size = 14, face = "bold", hjust = 0),
+    plot.subtitle = element_text(size = 11, hjust = 0, color = "gray40"),
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.text = element_text(size = 10),
+    panel.grid.minor = element_blank()
+  )
+
+# Display custom plot
+print(dispersion_plot)
+
+ggsave('1-figures/quality_control/dispersion_plot.svg',dispersion_plot,width=4,height=4,dpi=500)
+
+```
+
+```{r sample dendogram}
+
+rm_vst_counts
+rm_metadata
+
+# Prepare data for clustering -------------------------------------------------
+sample_dist <- dist(t(rm_vst_counts))
+sample_hclust <- hclust(sample_dist, method = "complete")
+
+# Set proper labels for the clustering
+sample_hclust$labels <- paste0(rm_metadata$genotype, "_D", rm_metadata$timepoint)
+
+# Create dendrogram data
+dend_data <- dendro_data(sample_hclust, type = "rectangle")
+
+# Fix label data
+label_data <- dend_data$labels %>%
+  dplyr::mutate(
+    label_text = label,
+    genotype = sub("_.*", "", label)
+  )
+
+# Identify cluster cutoff height (e.g., cut into 2 main clusters)
+cut_height <- sort(sample_hclust$height, decreasing = TRUE)[1] * 0.6
+
+# Create ggplot dendrogram
+gg_dend <- ggplot() +
+  geom_segment(data = dend_data$segments, 
+               aes(x = x, y = y, xend = xend, yend = yend),
+               color = "gray30", linewidth = 0.8) +
+  # Add horizontal line for cluster division
+  geom_hline(yintercept = cut_height, 
+             linetype = "dashed", 
+             color = "red3", 
+             linewidth = 0.7,
+             alpha = 0.6) +
+  geom_text(data = label_data,
+            aes(x = x, y = y - 1, label = label_text, color = genotype),
+            angle = 90, hjust = 1, size = 5, family = "Helvetica Neue", fontface = "bold") +
+  scale_color_manual(values = c("D21" = "royalblue3", "T21" = "red3"),
+                     guide = "none") +  # Remove legend
+  scale_y_continuous(expand = expansion(mult = c(0.25, 0.05))) +
+  labs(title = "Sample Clustering Dendrogram",
+       y = "Distance",
+       x = NULL) +
+  theme_minimal(base_family = "Helvetica Neue") +
+  theme(
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5, margin = margin(b = 10)),
+    axis.title.y = element_text(size = 14, face = "bold", margin = margin(r = 10)),
+    axis.text.y = element_text(size = 11),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    panel.grid = element_blank(),
+    plot.margin = margin(10, 20, 10, 20),
+    aspect.ratio = 0.5  # Compress vertically
+  )
+
+# Display the plot
+print(gg_dend)
+7
+# Save as SVG with wider dimensions
+ggsave("1-figures/quality_control/sample_dendrogram.svg", plot = gg_dend, width = 7, height = 6, dpi = 400)
+
+```
+
+```{r sample to sample correlation matrix heatmap}
+
+# ==============================================================================
+# Title: Sample-to-Sample Correlation Matrix for Respiratory Mesenchyme RNA-seq
+# Author: Ha-Na Shim
+# Date: August 11, 2024
+# Version: 4.2
+# Description: Correlation matrix heatmap of VST-normalized RM samples with
+#              genotype and timepoint annotations using viridis color scheme
+# ==============================================================================
+
+# Calculate correlation matrix -------------------------------------------------
+sample_correlation <- cor(rm_vst_counts, method = "pearson")
+
+# Prepare annotation data ------------------------------------------------------
+# Create annotation dataframe for heatmap
+annotation_df <- rm_metadata %>%
+  dplyr::select(timepoint, genotype) %>%
+  dplyr::mutate(
+    Timepoint = factor(paste0("D", timepoint), levels = c("D4", "D7", "D10", "D15")),
+    Genotype = genotype
+  ) %>%
+  dplyr::select(Timepoint, Genotype)
+
+# Ensure annotation order matches correlation matrix
+annotation_df <- annotation_df[colnames(sample_correlation), ]
+
+# Define annotation colors -----------------------------------------------------
+# Timepoint colors (consistent with PCA)
+timepoint_colors <- c(
+  "D4" = "#E41A1C",
+  "D7" = "#377EB8",
+  "D10" = "#4DAF4A",
+  "D15" = "#984EA3"
+)
+
+# Genotype colors (visually distinct, avoiding timepoint colors)
+genotype_unique <- unique(annotation_df$Genotype)
+genotype_colors <- setNames(
+  c("#FF7F00", "#6A3D9A", "#FFFF33", "#B15928", "#FB9A99", 
+    "#CAB2D6", "#FDBF6F", "#1F78B4", "#33A02C", "#E31A1C")[1:length(genotype_unique)],
+  genotype_unique
+)
+
+# Combine annotation colors
+annotation_colors <- list(
+  Timepoint = timepoint_colors,
+  Genotype = genotype_colors
+)
+
+# Create correlation heatmap ---------------------------------------------------
+# Generate viridis color palette
+heatmap_colors <- viridis::viridis(100)
+
+# Load font
+library(extrafont)
+loadfonts(quiet = TRUE)
+
+# Create heatmap
+correlation_heatmap <- pheatmap::pheatmap(
+  sample_correlation,
+  clustering_distance_rows = "euclidean",
+  clustering_distance_cols = "euclidean",
+  clustering_method = "complete",
+  annotation_col = annotation_df,
+  annotation_row = NULL,
+  annotation_colors = annotation_colors,
+  color = heatmap_colors,
+  breaks = seq(
+    min(sample_correlation), 
+    max(sample_correlation), 
+    length.out = 101
+  ),
+  border_color = NA,
+  show_rownames = TRUE,
+  show_colnames = FALSE,
+  fontsize = 8,
+  fontsize_row = 8,
+  fontsize_col = 8,
+  main = "Sample-to-Sample Correlation Matrix (RM)",
+  fontfamily = "Helvetica Neue",
+  annotation_legend = TRUE,
+  annotation_names_col = FALSE,
+  legend = TRUE,
+  fontsize_legend = 8,
+  angle_col = 45,
+  display_numbers = FALSE,
+  silent = TRUE
+)
+
+print(correlation_heatmap)
+
+ggsave('1-figures/quality_control/sample_correlation_heatmap.svg',correlation_heatmap,width=6.5,height=5,dpi=500)
+
+```
+
+```{r pca plot - no loadings shown}
+
+# ==============================================================================
+# Title: PCA Visualization for Respiratory Mesenchyme RNA-seq Data
+# Author: Ha-Na Shim
+# Date: August 11, 2024
+# Version: 4.2
+# Description: PCA plot of VST-normalized RM RNA-seq data
+# Note: Uses Helvetica Neue font via extrafont package
+# ==============================================================================
+
+
+# Prepare metadata -------------------------------------------------------------
+rm_metadata <- rm_metadata %>%
+  dplyr::mutate(
+    timepoint_factor = factor(timepoint, levels = c("4", "7", "10", "15"))
+  )
+
+# Perform PCA ------------------------------------------------------------------
+pca_result <- prcomp(t(rm_vst_counts), scale = TRUE, center = TRUE)
+variance_explained <- summary(pca_result)$importance[2,] * 100
+
+# Prepare data for plotting ----------------------------------------------------
+pca_df <- data.frame(
+  PC1 = pca_result$x[, "PC1"],
+  PC2 = pca_result$x[, "PC2"],
+  sample_id = rownames(pca_result$x)
+)
+
+pca_df <- merge(
+  pca_df,
+  rm_metadata,
+  by.x = "sample_id",
+  by.y = "row.names"
+)
+
+# Create PCA plot --------------------------------------------------------------
+timepoint_colors <- c(
+  "4" = "#E41A1C",
+  "7" = "#377EB8",
+  "10" = "#4DAF4A",
+  "15" = "#984EA3"
+)
+
+pca_plot <- ggplot(pca_df, aes(x = PC1, y = PC2, color = timepoint_factor, shape = genotype)) +
+  geom_point(size = 3, alpha = 0.8) +
+  scale_color_manual(
+    values = timepoint_colors,
+    name = "Timepoint (Days)",
+    labels = c("D4", "D7", "D10", "D15")
+  ) +
+  scale_shape_manual(
+    values = c(16, 17, 15, 18, 19, 21, 22, 23, 24, 25),
+    name = "Genotype"
+  ) +
+  labs(
+    title = "Principal Components Analysis - RM Samples",
+    x = paste0("PC1 (", round(variance_explained[1], 1), "% variance)"),
+    y = paste0("PC2 (", round(variance_explained[2], 1), "% variance)")
+  ) +
+  theme_bw() +
+  theme(
+    text = element_text(family = "Helvetica Neue"),
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5, family = "Helvetica Neue"),
+    axis.title = element_text(size = 14, face = "bold", family = "Helvetica Neue"),
+    axis.text = element_text(size = 11, family = "Helvetica Neue"),
+    legend.title = element_text(size = 12, face = "bold", family = "Helvetica Neue"),
+    legend.text = element_text(size = 11, family = "Helvetica Neue")
+  )
+
+print(pca_plot)
+
+ggsave('1-figures/quality_control/pca_plot_noloadings.svg',pca_plot,width=6.5,height=5,dpi=500)
+
+# SCREE plot
+
+# Create scree plot data
+n_pcs <- min(20, length(pca_result$sdev))
+scree_data <- data.frame(
+  PC = factor(1:n_pcs, levels = 1:n_pcs),
+  variance_explained = (pca_result$sdev[1:n_pcs]^2 / sum(pca_result$sdev^2)) * 100
+)
+
+scree_data <- scree_data %>%
+  dplyr::mutate(
+    cumulative_variance = cumsum(variance_explained)
+  )
+
+scree_plot <- ggplot(scree_data, aes(x = PC)) +
+  geom_col(aes(y = variance_explained), 
+           fill = "#377EB8", alpha = 0.8, width = 0.7) +
+  geom_line(aes(y = cumulative_variance, group = 1), 
+            color = "#E41A1C", size = 1.2) +
+  geom_point(aes(y = cumulative_variance), 
+             color = "#E41A1C", size = 3) +
+  geom_hline(yintercept = 80, linetype = "dashed", 
+             color = "gray40", alpha = 0.6) +
+  scale_y_continuous(
+    limits = c(0, 100),
+    breaks = seq(0, 100, 20),
+    sec.axis = sec_axis(~., name = "Cumulative Variance Explained (%)")
+  ) +
+  labs(
+    title = "PCA Scree Plot - RM Samples",
+    x = "Principal Component",
+    y = "Variance Explained (%)"
+  ) +
+  theme_minimal(base_family = "Helvetica Neue") +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    axis.title = element_text(size = 14, face = "bold"),
+    axis.text = element_text(size = 11),
+    axis.text.x = element_text(angle = 0, hjust = 0.5),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank()
+  )
+
+print(scree_plot)
+ggsave('1-figures/quality_control/scree_plot.svg', scree_plot, width = 6, height = 4, dpi = 500)
+
+
+```
+
+```{r pca plot - loadings shown}
+
+rm_metadata_pca <- rm_metadata %>%
+  dplyr::mutate(
+    timepoint_factor = factor(timepoint, levels = c("4", "7", "10", "15")),
+    group = paste0(genotype, "_D", timepoint)
+  )
+
+# Set rownames to match column names of expression matrix
+rownames(rm_metadata_pca) <- colnames(rm_vst_counts)
+
+# Perform PCA using PCAtools ---------------------------------------------------
+pca_result <- PCAtools::pca(
+  mat = rm_vst_counts,
+  metadata = rm_metadata_pca,
+  scale = TRUE,
+  center = TRUE,
+  removeVar = 0
+)
+
+# Correctly extract top 10 genes for PC1 and PC2 ------------------------------
+# The loadings are stored in pca_result$loadings
+pc1_loadings <- pca_result$loadings[, "PC1"]
+pc2_loadings <- pca_result$loadings[, "PC2"]
+
+# Get top 10 by absolute value
+top10_pc1 <- names(sort(abs(pc1_loadings), decreasing = TRUE)[1:10])
+top10_pc2 <- names(sort(abs(pc2_loadings), decreasing = TRUE)[1:10])
+
+# Print to verify
+cat("Top 10 PC1 genes:\n")
+print(top10_pc1)
+cat("\nTop 10 PC2 genes:\n")
+print(top10_pc2)
+
+# Create biplot with top loadings ---------------------------------------------
+pca_plot_loadings <- PCAtools::biplot(
+  pca_result,
+  lab = NULL,
+  colby = "timepoint_factor",
+  colkey = c("4" = "#E41A1C", 
+             "7" = "#377EB8", 
+             "10" = "#4DAF4A", 
+             "15" = "#984EA3"),
+  shape = "genotype",
+  shapekey = c("D21" = 16, "T21" = 17),
+  showLoadings = TRUE,
+  ntopLoadings = 10,
+  drawConnectors = TRUE,
+  colConnectors = "grey50",
+  title = "PCA Biplot with Top 10 Loadings",
+  subtitle = "Showing top 10 genes for PC1 and PC2",
+  legendPosition = "right"
+) +
+  theme(
+    text = element_text(family = "Helvetica Neue")
+  )
+
+print(pca_plot_loadings)
+
+ggsave('1-figures/quality_control/pca_plot_loadings.svg',pca_plot,width=6.5,height=5,dpi=500)
+
+
+```
+
+```{r gene biotype lineplot}
+
+# Get normalized counts from DESeq2
+normalized_counts <- DESeq2::counts(dds_rm, normalized = TRUE)
+
+# Create mock biotype data for visualization
+set.seed(123)
+gene_info <- data.frame(
+  gene_id = rownames(normalized_counts),
+  gene_biotype = sample(c("protein_coding", "lncRNA", "miRNA", 
+                          "pseudogene", "snoRNA", "snRNA", 
+                          "rRNA", "misc_RNA", "processed_transcript"),
+                        nrow(normalized_counts), 
+                        replace = TRUE,
+                        prob = c(0.7, 0.1, 0.05, 0.05, 0.02, 0.02, 0.02, 0.02, 0.02))
+)
+
+# Merge biotype information with counts
+counts_with_biotype <- normalized_counts %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("gene_id") %>%
+  dplyr::left_join(gene_info, by = "gene_id")
+
+# Calculate log-normalized counts per biotype per sample
+biotype_counts <- counts_with_biotype %>%
+  dplyr::filter(!is.na(gene_biotype)) %>%
+  dplyr::select(-gene_id) %>%
+  pivot_longer(cols = -gene_biotype, 
+               names_to = "sample", 
+               values_to = "count") %>%
+  dplyr::mutate(log_count = log2(count + 1)) %>%
+  dplyr::group_by(sample, gene_biotype) %>%
+  dplyr::summarise(
+    total_log_count = sum(log_count),
+    mean_log_count = mean(log_count),
+    .groups = 'drop'
+  ) %>%
+  dplyr::mutate(sample_num = as.numeric(factor(sample)))
+
+# Get top biotypes by abundance
+top_biotypes <- biotype_counts %>%
+  dplyr::group_by(gene_biotype) %>%
+  dplyr::summarise(avg_count = mean(total_log_count)) %>%
+  dplyr::arrange(desc(avg_count)) %>%
+  dplyr::slice_head(n = 8) %>%
+  dplyr::pull(gene_biotype)
+
+# Filter for top biotypes
+biotype_counts_top <- biotype_counts %>%
+  dplyr::filter(gene_biotype %in% top_biotypes) %>%
+  dplyr::mutate(gene_biotype = factor(gene_biotype, levels = top_biotypes))
+
+# Create color palette
+biotype_colors <- brewer.pal(min(8, length(top_biotypes)), "Dark2")
+names(biotype_colors) <- top_biotypes[1:length(biotype_colors)]
+
+# Create line plot
+biotype_lineplot <- ggplot(biotype_counts_top, 
+                           aes(x = reorder(sample, sample_num), 
+                               y = total_log_count, 
+                               group = gene_biotype,
+                               color = gene_biotype)) +
+  geom_line(size = 1.2, alpha = 0.8) +
+  geom_point(size = 3, alpha = 0.9) +
+  scale_color_manual(values = biotype_colors, name = "Gene Biotype") +
+  labs(x = "Sample", 
+       y = "Sum of log2(normalized counts + 1)",
+       title = "Gene Biotype Expression Patterns Across Samples",
+       subtitle = "Top 8 most abundant biotypes") +
+  theme_minimal(base_family = "Helvetica Neue") +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 12, hjust = 0.5, color = "gray40"),
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
+    axis.text.y = element_text(size = 10),
+    legend.title = element_text(size = 11, face = "bold"),
+    legend.text = element_text(size = 10),
+    legend.position = "right",
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+
+print(biotype_lineplot)
+
+
+ggsave('1-figures/quality_control/gene_biotype_lineplot.svg', 
+       biotype_lineplot, width = 14, height = 6, dpi = 500)
+
+```

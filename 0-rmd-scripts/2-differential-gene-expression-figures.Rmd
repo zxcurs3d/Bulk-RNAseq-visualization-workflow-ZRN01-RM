@@ -1,0 +1,2390 @@
+---
+title: "2-differential-gene-expression-figures"
+output: html_document
+date: "2025-09-02"
+---
+
+```{r}
+
+library(ggplot2)
+library(dplyr)
+library(VennDiagram)
+library(grid)
+library(svglite)
+library(UpSetR)
+
+```
+
+```{r}
+
+### table of contents ###
+
+
+
+
+
+
+
+```
+
+```{r volcano plots}
+
+deg_day4 <- readRDS('deg_day4_T21_vs_D21_apeglm.RDS')
+deg_day7 <- readRDS('deg_day7_T21_vs_D21_apeglm.RDS')
+deg_day10 <- readRDS('deg_day10_T21_vs_D21_apeglm.RDS')
+deg_day15 <- readRDS('deg_day15_T21_vs_D21_apeglm.RDS')
+
+
+# Load required libraries ------------------------------------------------------
+library(DESeq2)
+library(dplyr)
+library(tidyverse)
+library(ggrepel)
+library(ggplot2)
+library(ggrastr)
+
+# Define significance thresholds ----------------------------------------------
+log2FC_Cutoff <- 0.5
+padj_Cutoff <- 0.05
+
+# Volcano plot function --------------------------------------------------------
+make_volcano_plot <- function(geneList, 
+                              log2FC_Cutoff = 0.5, 
+                              padj_Cutoff = 0.05, 
+                              plotTitle = NULL,
+                              xmax = 10,
+                              ymax = NULL,     
+                              labelGenes = NULL,
+                              save_plot = FALSE,
+                              filename = "volcano_plot.svg") { 
+  require(tidyverse)
+  require(ggrepel)
+  require(ggplot2)
+  require(dplyr)
+  require(ggrastr)
+  
+  # Ensure geneList is a data frame
+  geneList <- as.data.frame(geneList)
+  
+  # Calculate combined score safely
+  geneList <- geneList %>%
+    mutate(
+      combined_score = -log10(pmax(padj, .Machine$double.xmin)) * (abs(log2FoldChange)*1.5)
+    ) %>%
+    mutate(
+      combined_score = ifelse(is.infinite(combined_score), 
+                              max(combined_score[is.finite(combined_score)]), 
+                              combined_score)
+    )
+  
+  # Identify genes to label
+  if (!is.null(labelGenes)) {
+    # Use custom gene list provided by user
+    genes_to_label <- labelGenes
+  } else {
+    # Use automatic selection (original behavior)
+    top_up <- geneList %>%
+      filter(log2FoldChange > log2FC_Cutoff, padj < padj_Cutoff) %>%
+      arrange(desc(combined_score)) %>%
+      slice_head(n = 10) %>%
+      pull(gene_id)
+    
+    top_down <- geneList %>%
+      filter(log2FoldChange < -log2FC_Cutoff, padj < padj_Cutoff) %>%
+      arrange(desc(combined_score)) %>%
+      slice_head(n = 10) %>%
+      pull(gene_id)
+    
+    # Default genes to highlight if no custom list provided
+    genes_to_box <- c("SOX9","PHOX2A","PHOX2B","SNAI1","NOS1",
+                      "ASCL1","SOX11","RET","NOS2","EDNRB","EDNRA")
+    
+    # Combine automatic selection with default genes
+    genes_to_label <- unique(c(top_up, top_down, genes_to_box))
+  }
+  
+  # Add label column
+  geneList$panel <- ifelse(geneList$gene_id %in% genes_to_label, "label", "no label")
+  
+  # Define differential expression using basic ifelse
+  geneList$differentialExpression <- ifelse(
+    geneList$log2FoldChange > log2FC_Cutoff & geneList$padj < padj_Cutoff, "UP",
+    ifelse(geneList$log2FoldChange < -log2FC_Cutoff & geneList$padj < padj_Cutoff, "DOWN", "NO")
+  )
+  
+  # Handle p-values safely
+  geneList$logpadj <- -log10(pmax(geneList$padj, .Machine$double.xmin))
+  
+  # Set x-axis limits to -10 to 10
+  xlim_range <- c(-xmax, xmax)
+  
+  if (is.null(ymax)) {
+    y_max <- max(geneList$logpadj, na.rm = TRUE)
+    ylim_range <- c(0, y_max * 1.1)
+  } else {
+    ylim_range <- c(0, ymax)
+    y_max <- ymax / 1.1
+  }
+  
+  # Count differential expression
+  upregulated_count <- sum(geneList$differentialExpression == "UP", na.rm = TRUE)
+  downregulated_count <- sum(geneList$differentialExpression == "DOWN", na.rm = TRUE)
+  
+  # Create plot title
+  if (!is.null(plotTitle)) {
+    plot_title <- plotTitle
+  } else {
+    plot_title <- "Volcano Plot"
+  }
+  
+  # Prepare label data with side constraints
+  label_data <- geneList %>%
+    filter(gene_id %in% genes_to_label,
+           differentialExpression != "NO") %>%
+    mutate(
+      # Determine which side of the plot each gene should be labeled on
+      label_side = ifelse(log2FoldChange < -log2FC_Cutoff, "left", "right"),
+      # Set label constraints based on side
+      label_x_min = ifelse(label_side == "left", xlim_range[1], log2FC_Cutoff),
+      label_x_max = ifelse(label_side == "left", -log2FC_Cutoff, xlim_range[2])
+    )
+  
+  # Create separate label datasets for left and right sides
+  label_left <- label_data %>% filter(label_side == "left")
+  label_right <- label_data %>% filter(label_side == "right")
+  
+  ## -------------------------------------------------------------------- ##
+  ##  volcano plot                                                       ##
+  ## -------------------------------------------------------------------- ##
+  volcano <- ggplot(
+    geneList,
+    aes(x = log2FoldChange,
+        y = logpadj,
+        colour = differentialExpression)       # point colour
+  ) +
+    ggrastr::geom_point_rast(alpha = 0.65) +
+    
+    ## colour scale for BOTH points and label outlines/text
+    scale_colour_manual(values = c("DOWN" = "royalblue3",
+                                   "NO"   = "grey",
+                                   "UP"   = "red3")) +
+    
+    labs(
+      y = expression(-log[10] ~ "[FDR-adjusted p-value]"),
+      x = expression(log[2] ~ "FoldChange"),
+      title = plot_title
+    ) +
+    theme_bw(base_family = "Helvetica Neue") +
+    theme(
+      axis.text.x  = element_text(size = 10),
+      axis.text.y  = element_text(size = 10),
+      axis.title.x = element_text(size = 16),  # Increased more
+      axis.title.y = element_text(size = 16),  # Increased more
+      panel.grid   = element_blank(),
+      panel.border = element_blank(),
+      axis.line    = element_line(colour = "black"),
+      axis.ticks   = element_line(colour = "black"),
+      legend.position = "none",
+      aspect.ratio    = 1,
+      plot.title      = element_text(hjust = 0, size = 16),  # Left justified and larger
+      plot.margin = margin(t = 20, r = 10, b = 10, l = 10, unit = "pt")
+    ) +
+    
+    ## ---------- Left side labels (constrained to left side) ---------- ##
+    {if(nrow(label_left) > 0) {
+      geom_label_repel(
+        data = label_left,
+        aes(label  = gene_id,
+            colour = differentialExpression),
+        fill         = "white",
+        label.size   = 0.25,                    # outline thickness
+        size         = 4,                       # larger text
+        family       = "Helvetica Neue",        # Force Helvetica Neue
+        show.legend  = FALSE,
+        segment.color = NA,                     # no connecting lines
+        xlim         = c(label_left$label_x_min[1], label_left$label_x_max[1]),
+        ylim         = c(-Inf, Inf),
+        min.segment.length = Inf,               # no segments drawn
+        label.padding = unit(0.15, "lines"),   # reduced padding
+        label.r      = unit(0.1, "lines"),     # smaller corner radius
+        force        = 2,                      # moderate repulsion
+        max.overlaps = Inf
+      )
+    }} +
+    
+    ## ---------- Right side labels (constrained to right side) ---------- ##
+    {if(nrow(label_right) > 0) {
+      geom_label_repel(
+        data = label_right,
+        aes(label  = gene_id,
+            colour = differentialExpression),
+        fill         = "white",
+        label.size   = 0.25,                    # outline thickness
+        size         = 4,                       # larger text
+        family       = "Helvetica Neue",        # Force Helvetica Neue
+        show.legend  = FALSE,
+        segment.color = NA,                     # no connecting lines
+        xlim         = c(label_right$label_x_min[1], label_right$label_x_max[1]),
+        ylim         = c(-Inf, Inf),
+        min.segment.length = Inf,               # no segments drawn
+        label.padding = unit(0.15, "lines"),   # reduced padding
+        label.r      = unit(0.1, "lines"),     # smaller corner radius
+        force        = 2,                      # moderate repulsion
+        max.overlaps = Inf
+      )
+    }} +
+    
+    coord_cartesian(xlim = xlim_range,
+                    ylim = ylim_range,
+                    clip = "off") +
+    
+    # Enhanced axis scales with more tick marks
+    scale_x_continuous(
+      breaks = seq(-10, 10, by = 2),  # Fixed breaks for -10 to 10
+      limits = c(-10, 10),
+      expand = c(0.02, 0)
+    ) +
+    scale_y_continuous(
+      trans   = "log1p",
+      breaks  = scales::pretty_breaks(n = 10), # More y-axis breaks
+      expand  = c(0, 0),
+      limits  = ylim_range
+    ) +
+    
+    # Cutoff lines
+    geom_vline(xintercept =  log2FC_Cutoff,
+               linetype   = "dashed", size = 0.4) +
+    geom_vline(xintercept = -log2FC_Cutoff,
+               linetype   = "dashed", size = 0.4) +
+    geom_hline(yintercept = -log10(padj_Cutoff),
+               linetype   = "dashed", size = 0.4) +
+    
+    # Add count numbers in corners
+    annotate("text", 
+             x = -9,  # Top left corner
+             y = ylim_range[2] * 0.95,
+             label = as.character(downregulated_count),
+             size = 7,
+             family = "Helvetica Neue",
+             color = "royalblue3",
+             fontface = "bold") +
+    
+    annotate("text", 
+             x = 9,  # Top right corner
+             y = ylim_range[2] * 0.95,
+             label = as.character(upregulated_count),
+             size = 7,
+             family = "Helvetica Neue",
+             color = "red3",
+             fontface = "bold")
+  
+  # Save plot if requested
+  if (save_plot) {
+    ggsave(filename = filename,
+           plot = volcano,
+           width = 4,
+           height = 4,
+           units = "in",
+           dpi = 300,
+           device = "svg")
+    message(paste0("Plot saved as: ", filename))
+  }
+  
+  return(volcano)
+}
+
+
+# Generate volcano plots for each comparison ----------------------------------
+
+library(patchwork)
+
+# Generate volcano plot for Day 4
+volcano_day4 <- make_volcano_plot(
+  geneList = deg_day4,
+  log2FC_Cutoff = 0.5,
+  padj_Cutoff = 0.05,
+  plotTitle = "Day 4: T21 vs D21",
+  xmax = 10,
+  save_plot = FALSE  # Don't save individual plots
+)
+
+# Generate volcano plot for Day 7
+volcano_day7 <- make_volcano_plot(
+  geneList = deg_day7,
+  log2FC_Cutoff = 0.5,
+  padj_Cutoff = 0.05,
+  plotTitle = "Day 7: T21 vs D21",
+  xmax = 10,
+  save_plot = FALSE
+)
+
+# Generate volcano plot for Day 10
+volcano_day10 <- make_volcano_plot(
+  geneList = deg_day10,
+  log2FC_Cutoff = 0.5,
+  padj_Cutoff = 0.05,
+  plotTitle = "Day 10: T21 vs D21",
+  xmax = 10,
+  save_plot = FALSE
+)
+
+# Generate volcano plot for Day 15
+volcano_day15 <- make_volcano_plot(
+  geneList = deg_day15,
+  log2FC_Cutoff = 0.5,
+  padj_Cutoff = 0.05,
+  plotTitle = "Day 15: T21 vs D21",
+  xmax = 10,
+  save_plot = FALSE
+)
+
+# Combine plots in 2x2 grid
+combined_volcanoes <- (volcano_day4 | volcano_day7) / 
+  (volcano_day10 | volcano_day15) +
+  plot_annotation(title = "T21 vs D21 Across Timepoints",
+                  theme = theme(plot.title = element_text(size = 18, face = "bold", hjust = 0.5)))
+
+# Display the combined plot
+print(combined_volcanoes)
+
+# Save the combined plot
+ggsave("1-figures/differential_gene_expression/volcano_combined_2x2_T21_vs_D21.svg",
+       plot = combined_volcanoes,
+       width = 12,
+       height = 12,
+       units = "in",
+       dpi = 400,
+       device = "svg")
+
+```
+
+```{r deg histogram}
+
+###############
+# deg histogram
+###############
+
+# Process DEG data -------------------------------------------------------------
+process_deg <- function(deg_df, timepoint, log2fc_threshold = 0.5, padj_threshold = 0.05) {
+  deg_filtered <- deg_df %>%
+    dplyr::filter(!is.na(padj), !is.na(log2FoldChange)) %>%
+    dplyr::filter(padj < padj_threshold, abs(log2FoldChange) > log2fc_threshold)
+  
+  data.frame(
+    Timepoint = paste0("Day ", timepoint),
+    Direction = c("Upregulated", "Downregulated"),
+    Count = c(
+      sum(deg_filtered$log2FoldChange > 0),
+      sum(deg_filtered$log2FoldChange < 0)
+    ),
+    stringsAsFactors = FALSE
+  )
+}
+
+# Combine all DEG data
+deg_summary <- rbind(
+  process_deg(deg_day4, 4),
+  process_deg(deg_day7, 7),
+  process_deg(deg_day10, 10),
+  process_deg(deg_day15, 15)
+)
+
+# Set factor levels for proper ordering
+deg_summary$Timepoint <- factor(deg_summary$Timepoint, 
+                                levels = c("Day 4", "Day 7", "Day 10", "Day 15"))
+deg_summary$Direction <- factor(deg_summary$Direction, 
+                                levels = c("Upregulated", "Downregulated"))
+
+# Create the plot --------------------------------------------------------------
+deg_histogram <- ggplot(deg_summary, aes(x = Timepoint, y = Count, fill = Direction)) +
+  geom_bar(stat = "identity", 
+           position = position_dodge(width = 0.8),
+           width = 0.7,
+           alpha = 0.9) +
+  geom_text(aes(label = Count),
+            position = position_dodge(width = 0.8),
+            vjust = -0.5,
+            size = 4.5,
+            family = "Helvetica Neue",
+            fontface = "bold") +
+  scale_fill_manual(values = c("Upregulated" = "red3", 
+                               "Downregulated" = "royalblue3")) +
+  scale_y_continuous(
+    limits = c(0, max(deg_summary$Count) * 1.12),
+    breaks = scales::pretty_breaks(n = 6),
+    expand = c(0, 0)
+  ) +
+  labs(
+    title = "Differentially Expressed Genes: T21 vs D21",
+    subtitle = expression(paste("|log"[2], "FC| > 0.5, ", italic("p")[adj], " < 0.05")),
+    x = NULL,
+    y = "Number of Genes",
+    fill = NULL
+  ) +
+  theme_minimal(base_family = "Helvetica Neue") +
+  theme(
+    plot.title = element_text(size = 18, face = "bold", hjust = 0, 
+                              margin = margin(b = 5), family = "Helvetica Neue"),
+    plot.subtitle = element_text(size = 12, hjust = 0, color = "gray40",
+                                 margin = margin(b = 15), family = "Helvetica Neue"),
+    axis.title.y = element_text(size = 14, face = "bold", 
+                                margin = margin(r = 10), family = "Helvetica Neue"),
+    axis.text.x = element_text(size = 12, face = "bold", family = "Helvetica Neue"),
+    axis.text.y = element_text(size = 11, family = "Helvetica Neue"),
+    legend.position = "top",
+    legend.text = element_text(size = 12, family = "Helvetica Neue"),
+    legend.key.size = unit(0.8, "cm"),
+    legend.spacing.x = unit(0.5, "cm"),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_line(color = "gray90", linewidth = 0.3),
+    plot.margin = margin(20, 20, 20, 20)
+  )
+
+print(deg_histogram)
+
+# Save the plot ----------------------------------------------------------------
+ggsave("1-figures/differential_gene_expression/deg_histogram.svg", 
+       plot = deg_histogram, 
+       width = 10, 
+       height = 6, 
+       dpi = 300)
+
+```
+
+```{r venn and upset plot for overlap of degs across timepoints}
+
+deg_day4
+deg_day7
+deg_day10
+deg_day15
+
+get_sig_genes <- function(deg_df, direction = "up", log2fc_threshold = 0.5, padj_threshold = 0.05) {
+  filtered <- deg_df %>%
+    dplyr::filter(!is.na(padj), !is.na(log2FoldChange)) %>%
+    dplyr::filter(padj < padj_threshold, abs(log2FoldChange) > log2fc_threshold)
+  
+  if (direction == "up") {
+    return(filtered$gene_id[filtered$log2FoldChange > 0])
+  } else {
+    return(filtered$gene_id[filtered$log2FoldChange < 0])
+  }
+}
+
+up_genes <- list(
+  "Day 4" = get_sig_genes(deg_day4, "up"),
+  "Day 7" = get_sig_genes(deg_day7, "up"),
+  "Day 10" = get_sig_genes(deg_day10, "up"),
+  "Day 15" = get_sig_genes(deg_day15, "up")
+)
+
+down_genes <- list(
+  "Day 4" = get_sig_genes(deg_day4, "down"),
+  "Day 7" = get_sig_genes(deg_day7, "down"),
+  "Day 10" = get_sig_genes(deg_day10, "down"),
+  "Day 15" = get_sig_genes(deg_day15, "down")
+)
+
+venn_up <- VennDiagram::venn.diagram(
+  x = up_genes,
+  filename = NULL,
+  fill = c("#FFB3B3", "#FFD4A3", "#FFFFB3", "#B3FFB3"),
+  alpha = 0.3,
+  col = "gray50",
+  lwd = 1,
+  cex = 1.2,
+  fontfamily = "Helvetica Neue",
+  cat.cex = 1.2,
+  cat.fontfamily = "Helvetica Neue",
+  cat.fontface = "plain",
+  cat.dist = c(0.22, 0.22, 0.22, 0.22),
+  cat.pos = c(-15, 15, 0, 0),
+  ext.dist = c(0.3, 0.3, 0.3, 0.3),
+  ext.pos = c(10, -10, 180, 180),
+  margin = 0.05,
+  main = "Upregulated Genes Across Timepoints",
+  main.cex = 1.4,
+  main.fontfamily = "Helvetica Neue",
+  main.fontface = "plain",
+  sub = expression(paste("|log"[2], "FC| > 0.5, ", italic("p")[adj], " < 0.05")),
+  sub.cex = 1,
+  sub.fontfamily = "Helvetica Neue"
+)
+
+venn_down <- VennDiagram::venn.diagram(
+  x = down_genes,
+  filename = NULL,
+  fill = c("#B3CCFF", "#B3E5FF", "#B3F0FF", "#B3FFE5"),
+  alpha = 0.3,
+  col = "gray50",
+  lwd = 1,
+  cex = 1.2,
+  fontfamily = "Helvetica Neue",
+  cat.cex = 1.2,
+  cat.fontfamily = "Helvetica Neue",
+  cat.fontface = "plain",
+  cat.dist = c(0.22, 0.22, 0.22, 0.22),
+  cat.pos = c(-15, 15, 0, 0),
+  ext.dist = c(0.3, 0.3, 0.3, 0.3),
+  ext.pos = c(10, -10, 180, 180),
+  margin = 0.05,
+  main = "Downregulated Genes Across Timepoints",
+  main.cex = 1.4,
+  main.fontfamily = "Helvetica Neue",
+  main.fontface = "plain",
+  sub = expression(paste("|log"[2], "FC| > 0.5, ", italic("p")[adj], " < 0.05")),
+  sub.cex = 1,
+  sub.fontfamily = "Helvetica Neue"
+)
+
+grid.newpage()
+grid.draw(venn_up)
+
+grid.newpage()
+grid.draw(venn_down)
+
+svglite("1-figures/differential_gene_expression/venn_upregulated.svg", width = 8, height = 8)
+grid.draw(venn_up)
+dev.off()
+
+svglite("1-figures/differential_gene_expression/venn_downregulated.svg", width = 8, height = 8)
+grid.draw(venn_down)
+dev.off()
+
+up_list_all <- unique(unlist(up_genes))
+up_matrix <- data.frame(
+  gene = up_list_all,
+  Day4 = as.numeric(up_list_all %in% up_genes[["Day 4"]]),
+  Day7 = as.numeric(up_list_all %in% up_genes[["Day 7"]]),
+  Day10 = as.numeric(up_list_all %in% up_genes[["Day 10"]]),
+  Day15 = as.numeric(up_list_all %in% up_genes[["Day 15"]])
+)
+
+svglite("1-figures/differential_gene_expression/upset_upregulated.svg", width = 10, height = 6)
+upset(up_matrix, 
+      sets = c("Day4", "Day7", "Day10", "Day15"),
+      sets.bar.color = "red3",
+      main.bar.color = "red3",
+      matrix.color = "red3",
+      text.scale = c(1.5, 1.3, 1.3, 1.3, 1.5, 1.3),
+      mb.ratio = c(0.6, 0.4),
+      order.by = "freq")
+dev.off()
+
+down_list_all <- unique(unlist(down_genes))
+down_matrix <- data.frame(
+  gene = down_list_all,
+  Day4 = as.numeric(down_list_all %in% down_genes[["Day 4"]]),
+  Day7 = as.numeric(down_list_all %in% down_genes[["Day 7"]]),
+  Day10 = as.numeric(down_list_all %in% down_genes[["Day 10"]]),
+  Day15 = as.numeric(down_list_all %in% down_genes[["Day 15"]])
+)
+
+svglite("1-figures/differential_gene_expression/upset_downregulated.svg", width = 10, height = 6)
+upset(down_matrix, 
+      sets = c("Day4", "Day7", "Day10", "Day15"),
+      sets.bar.color = "royalblue3",
+      main.bar.color = "royalblue3", 
+      matrix.color = "royalblue3",
+      text.scale = c(1.5, 1.3, 1.3, 1.3, 1.5, 1.3),
+      mb.ratio = c(0.6, 0.4),
+      order.by = "freq")
+dev.off()
+
+```
+
+```{r ma plots}
+
+
+# Function to create MA plot ---------------------------------------------------
+create_ma_plot <- function(deg_df, comparison_name, log2fc_threshold = 0.5, padj_threshold = 0.05) {
+  
+  deg_df <- deg_df %>%
+    dplyr::mutate(
+      significant = case_when(
+        padj < padj_threshold & log2FoldChange > log2fc_threshold ~ "Up",
+        padj < padj_threshold & log2FoldChange < -log2fc_threshold ~ "Down",
+        TRUE ~ "NS"
+      )
+    )
+  
+  n_up <- sum(deg_df$significant == "Up", na.rm = TRUE)
+  n_down <- sum(deg_df$significant == "Down", na.rm = TRUE)
+  
+  color_values <- c("Up" = "red3", "Down" = "royalblue3", "NS" = "grey60")
+  
+  ma_plot <- ggplot(deg_df, aes(x = baseMean, y = log2FoldChange, color = significant)) +
+    geom_point(
+      data = subset(deg_df, significant == "NS"),
+      alpha = 0.3,
+      size = 1
+    ) +
+    geom_point(
+      data = subset(deg_df, significant != "NS"),
+      alpha = 0.7,
+      size = 1
+    ) +
+    scale_x_log10(
+      breaks = trans_breaks("log10", function(x) 10^x),
+      labels = trans_format("log10", math_format(10^.x))
+    ) +
+    scale_color_manual(values = color_values) +
+    geom_hline(yintercept = 0, color = "black", size = 0.5) +
+    geom_hline(yintercept = c(-log2fc_threshold, log2fc_threshold), 
+               color = "black", linetype = "dashed", size = 0.3) +
+    labs(
+      title = comparison_name,
+      subtitle = paste0("Up: ", n_up, " genes | Down: ", n_down, " genes (padj < ", 
+                        padj_threshold, ", |log2FC| > ", log2fc_threshold, ")"),
+      x = "Mean Expression (baseMean)",
+      y = expression(log[2]~"Fold Change")
+    ) +
+    theme_minimal() +
+    theme(
+      text = element_text(family = "Helvetica Neue"),
+      plot.title = element_text(size = 14, face = "bold", hjust = 0),
+      plot.subtitle = element_text(size = 11, hjust = 0, color = "gray40"),
+      axis.title = element_text(size = 12, face = "bold"),
+      axis.text = element_text(size = 10),
+      legend.position = "none",
+      panel.grid.minor = element_blank()
+    ) +
+    coord_cartesian(ylim = c(-10, 10))
+  
+  return(ma_plot)
+}
+
+# Create MA plots for each timepoint ------------------------------------------
+plot_day4 <- create_ma_plot(deg_day4, "Day 4: T21 vs D21")
+plot_day7 <- create_ma_plot(deg_day7, "Day 7: T21 vs D21")
+plot_day10 <- create_ma_plot(deg_day10, "Day 10: T21 vs D21")
+plot_day15 <- create_ma_plot(deg_day15, "Day 15: T21 vs D21")
+
+# Arrange plots in grid and save as SVG ---------------------------------------
+svglite::svglite("1-figures/differential_gene_expression/ma_plots_T21_vs_D21.svg", width = 9, height = 7)
+gridExtra::grid.arrange(plot_day4, plot_day7, plot_day10, plot_day15, 
+                        ncol = 2, nrow = 2,
+                        top = grid::textGrob("MA Plots", 
+                                             gp = grid::gpar(fontsize = 16, fontface = "bold")))
+dev.off()
+
+```
+
+```{r cpm boxplot}
+
+# Load data --------------------------------------------------------------------
+rm_metadata <- readRDS('1-source-files/RM_metadata.RDS')
+rm_raw_counts <- readRDS('1-source-files/RM_filt_raw_counts.RDS')
+
+# Calculate CPM using edgeR
+cpm_matrix <- cpm(rm_raw_counts)
+
+# Check dimensions
+dim(cpm_matrix)
+
+deg_day4
+deg_day7
+deg_day10
+deg_day15
+
+# Function to create CPM boxplot across timepoints ----------------------------
+plot_cpm_boxplot <- function(
+    gene_list,
+    cpm_matrix,
+    metadata,
+    deg_day4,
+    deg_day7,
+    deg_day10,
+    deg_day15,
+    log2fc_threshold = 0.5,
+    padj_threshold = 0.05,
+    grid_cols = NULL,
+    grid_rows = NULL,
+    save_plots = FALSE,
+    save_path = "cpm_boxplots",
+    save_format = "svg"
+) {
+  
+  plot_list <- list()
+  
+  for (gene in gene_list) {
+    
+    if (!gene %in% rownames(cpm_matrix)) {
+      warning(paste("Gene", gene, "not found in CPM matrix"))
+      next
+    }
+    
+    gene_cpm <- cpm_matrix[gene, ]
+    
+    plot_data <- data.frame(
+      sample = names(gene_cpm),
+      cpm = as.numeric(gene_cpm),
+      stringsAsFactors = FALSE
+    ) %>%
+      dplyr::left_join(
+        metadata %>% tibble::rownames_to_column("sample"),
+        by = "sample"
+      ) %>%
+      dplyr::mutate(
+        timepoint = as.numeric(as.character(timepoint)),
+        genotype = factor(genotype, levels = c("D21", "T21"))
+      )
+    
+    mean_data <- plot_data %>%
+      dplyr::group_by(timepoint, genotype) %>%
+      dplyr::summarise(mean_cpm = mean(cpm), .groups = 'drop')
+    
+    sig_data <- data.frame(
+      timepoint = c(4, 7, 10, 15),
+      sig_label = NA_character_,
+      stringsAsFactors = FALSE
+    )
+    
+    deg_list <- list(deg_day4, deg_day7, deg_day10, deg_day15)
+    
+    for (i in 1:4) {
+      deg_df <- deg_list[[i]]
+      if (gene %in% deg_df$gene_id) {
+        gene_stats <- deg_df[deg_df$gene_id == gene, ]
+        if (!is.na(gene_stats$padj) && !is.na(gene_stats$log2FoldChange)) {
+          if (abs(gene_stats$log2FoldChange) > log2fc_threshold) {
+            if (gene_stats$padj < 0.0001) {
+              sig_data$sig_label[i] <- "****"
+            } else if (gene_stats$padj < 0.001) {
+              sig_data$sig_label[i] <- "***"
+            } else if (gene_stats$padj < 0.01) {
+              sig_data$sig_label[i] <- "**"
+            } else if (gene_stats$padj < padj_threshold) {
+              sig_data$sig_label[i] <- "*"
+            } else {
+              sig_data$sig_label[i] <- "ns"
+            }
+          } else {
+            sig_data$sig_label[i] <- "ns"
+          }
+        } else {
+          sig_data$sig_label[i] <- "ns"
+        }
+      } else {
+        sig_data$sig_label[i] <- "ns"
+      }
+    }
+    
+    y_max <- max(plot_data$cpm)
+    sig_data$y_pos <- y_max * 1.05
+    sig_data$y_line <- y_max * 1.02
+    
+    p <- ggplot(plot_data, aes(x = timepoint, y = cpm)) +
+      geom_boxplot(
+        aes(group = interaction(timepoint, genotype), fill = genotype),
+        position = position_identity(),
+        width = 0.8,
+        outlier.shape = NA,
+        staplewidth = 0.4,
+        alpha = 0.9
+      ) +
+      geom_point(
+        aes(color = genotype),
+        position = position_identity(),
+        size = 2,
+        alpha = 0.8
+      ) +
+      geom_line(
+        data = mean_data,
+        aes(x = timepoint, y = mean_cpm, color = genotype, group = genotype),
+        linewidth = 1,
+        linetype = "dashed",
+        alpha = 0.9
+      ) +
+      geom_segment(
+        data = sig_data,
+        aes(x = timepoint - 0.3, xend = timepoint + 0.3, y = y_line, yend = y_line),
+        color = "black",
+        linewidth = 0.4
+      ) +
+      geom_text(
+        data = sig_data,
+        aes(x = timepoint, y = y_pos, label = sig_label),
+        family = "Helvetica Neue",
+        size = 5,
+        vjust = 0
+      ) +
+      scale_x_continuous(
+        breaks = c(4, 7, 10, 15),
+        labels = c("Day 4", "Day 7", "Day 10", "Day 15"),
+        limits = c(3, 16)
+      ) +
+      scale_y_continuous(
+        limits = c(0, y_max * 1.15),
+        expand = c(0, 0),
+        breaks = scales::pretty_breaks()
+      ) +
+      scale_fill_manual(values = c("D21" = "royalblue3", "T21" = "red3")) +
+      scale_color_manual(values = c("D21" = "royalblue3", "T21" = "red3")) +
+      labs(
+        title = gene,
+        x = NULL,
+        y = "CPM (Counts per million)",
+        fill = "Genotype",
+        color = "Genotype"
+      ) +
+      theme_bw() +
+      theme(
+        text = element_text(family = "Helvetica Neue"),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0, family = "Helvetica Neue"),
+        axis.title.y = element_text(size = 14, family = "Helvetica Neue"),
+        axis.text = element_text(size = 12, family = "Helvetica Neue"),
+        axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+        legend.title = element_text(size = 13, family = "Helvetica Neue"),
+        legend.text = element_text(size = 12, family = "Helvetica Neue"),
+        panel.grid.minor = element_blank()
+      )
+    
+    plot_list[[gene]] <- p
+  }
+  
+  # Handle single or multiple plots
+  if (length(plot_list) == 1) {
+    print(plot_list[[1]])
+    
+    if (save_plots) {
+      filename <- paste0(save_path, "_", names(plot_list)[1], ".", save_format)
+      ggsave(filename, plot = plot_list[[1]], width = 5.5, height = 3, dpi = 500)
+    }
+  } else if (length(plot_list) > 1 && !is.null(grid_cols) && !is.null(grid_rows)) {
+    # Create grid plot
+    combined_plot <- wrap_plots(plot_list, ncol = grid_cols, nrow = grid_rows) +
+      plot_layout(guides = 'collect') &
+      theme(legend.position = 'right')
+    
+    print(combined_plot)
+    
+    if (save_plots) {
+      filename <- paste0(save_path, "_grid.", save_format)
+      ggsave(filename, plot = combined_plot, 
+             width = 4 * grid_cols + 2, 
+             height = 4 * grid_rows, 
+             dpi = 300)
+    }
+  } else {
+    # Print plots separately if no grid specified
+    for (p in plot_list) {
+      print(p)
+    }
+    
+    if (save_plots) {
+      for (gene_name in names(plot_list)) {
+        filename <- paste0(save_path, "_", gene_name, ".", save_format)
+        ggsave(filename, plot = plot_list[[gene_name]], width = 4, height = 3, dpi = 500)
+      }
+    }
+  }
+}
+
+# Example usage ----------------------------------------------------------------
+
+plot_cpm_boxplot(
+  gene_list = "FOXF1",
+  cpm_matrix = cpm_matrix,
+  metadata = rm_metadata,
+  deg_day4 = deg_day4,
+  deg_day7 = deg_day7,
+  deg_day10 = deg_day10,
+  deg_day15 = deg_day15,
+  save_plots = TRUE,
+)
+
+# Multiple genes in grid
+grouped_boxplot_fig<-plot_cpm_boxplot(
+  gene_list = c("NR2F2", "TBX5", "NKX2-5", "GATA4", "MEF2C", "HAND2"),
+  cpm_matrix = cpm_matrix,
+  metadata = rm_metadata,
+  deg_day4 = deg_day4,
+  deg_day7 = deg_day7,
+  deg_day10 = deg_day10,
+  deg_day15 = deg_day15,
+  grid_cols = 3,
+  grid_rows = 2,
+  save_plots = TRUE
+)
+
+ggsave('1-figures/differential_gene_expression/grouped_boxplot_fig.svg',
+       grouped_boxplot_fig,width=6,height=6,dpi=500)
+
+```
+
+```{r lineplot}
+
+rm_vst_counts
+rm_metadata
+
+extract_GO_genes <- function(GO_ids, 
+                             species = "human", 
+                             include_children = TRUE,
+                             save_csv = FALSE,
+                             csv_dir = "GO_gene_lists/") {
+  
+  # Load required libraries
+  require(biomaRt)
+  require(GO.db)
+  require(dplyr)
+  
+  # Set up mart based on species
+  if (species == "human") {
+    mart <- useEnsembl(
+      biomart = "genes",
+      dataset = "hsapiens_gene_ensembl",
+      mirror  = "useast"
+    )
+  } else if (species == "mouse") {
+    mart <- useEnsembl(
+      biomart = "genes",
+      dataset = "mmusculus_gene_ensembl",
+      mirror  = "useast"
+    )
+  } else {
+    stop("Species must be 'human' or 'mouse'")
+  }
+  
+  # Make sure GO_ids is a vector
+  if (!is.vector(GO_ids)) {
+    GO_ids <- as.vector(GO_ids)
+  }
+  
+  # Create directory for CSV files if needed
+  if (save_csv && !dir.exists(csv_dir)) {
+    dir.create(csv_dir, recursive = TRUE)
+  }
+  
+  # Initialize results list
+  results <- list()
+  
+  # Process each GO ID
+  for (go_id in GO_ids) {
+    
+    cat("\nProcessing", go_id, "...\n")
+    
+    # Get GO term name
+    go_term_name <- tryCatch({
+      Term(go_id)
+    }, error = function(e) {
+      warning(paste("Could not find term for", go_id))
+      return(paste0("GO_TERM_", go_id))
+    })
+    
+    # Clean term name for variable naming
+    clean_name <- gsub(" ", "_", toupper(go_term_name))
+    clean_name <- gsub("-", "_", clean_name)
+    clean_name <- gsub("[^A-Z0-9_]", "", clean_name)
+    clean_name <- paste0("GOBP_", clean_name)
+    
+    # Get all GO terms to query
+    if (include_children) {
+      children_list <- GOBPOFFSPRING[[go_id]]
+      children_list <- unique(children_list[!is.na(children_list)])
+      all_GO_terms <- c(go_id, children_list)
+    } else {
+      all_GO_terms <- go_id
+    }
+    
+    # Query biomart
+    genes_in_go <- getBM(
+      attributes = c("ensembl_gene_id", "external_gene_name", "description"),
+      filters    = "go",
+      values     = all_GO_terms,
+      mart       = mart
+    )
+    
+    # Extract unique gene names
+    if (species == "human") {
+      gene_names <- unique(genes_in_go$external_gene_name)
+    } else {
+      gene_names <- unique(genes_in_go$external_gene_name)  # Same column for mouse
+    }
+    
+    # Remove empty strings
+    gene_names <- gene_names[gene_names != ""]
+    
+    # Store in results
+    results[[clean_name]] <- gene_names
+    
+    # Print summary
+    cat("GO Term:", go_term_name, "\n")
+    cat("Variable name:", clean_name, "\n")
+    cat("Number of genes found:", length(gene_names), "\n")
+    if (include_children) {
+      cat("Number of child terms included:", length(children_list), "\n")
+    }
+    
+    # Save CSV if requested
+    if (save_csv) {
+      csv_filename <- file.path(csv_dir, paste0(clean_name, "_", species, ".csv"))
+      write.csv(
+        data.frame(
+          gene_symbol = gene_names,
+          GO_ID = go_id,
+          GO_term = go_term_name
+        ),
+        file = csv_filename,
+        row.names = FALSE
+      )
+      cat("Saved to:", csv_filename, "\n")
+    }
+  }
+  
+  # If single GO ID, return vector directly
+  if (length(GO_ids) == 1) {
+    return(results[[1]])
+  } else {
+    return(results)
+  }
+}
+
+compile_unique_genes <- function(go_list) {
+  stopifnot(is.list(go_list))
+  unique(unlist(go_list, use.names = FALSE))
+}
+
+tmm_lineplot <- function(
+    genes_vec,
+    cpm_mat,
+    meta_df,
+    expression_metric   = c("zscore", "mean_cpm", "median_cpm"),
+    plot_title          = NULL,
+    save_path           = NULL,
+    x_compact           = TRUE
+) {
+  ## ── 0) Checks -------------------------------------------------------------
+  if (is.list(genes_vec)) genes_vec <- unique(unlist(genes_vec, use.names = FALSE))
+  expression_metric <- match.arg(expression_metric)
+  stopifnot(is.matrix(cpm_mat),
+            all(c("genotype", "timepoint") %in% colnames(meta_df)))
+  
+  present <- intersect(genes_vec, rownames(cpm_mat))
+  if (!length(present))
+    stop("None of the requested genes are present in cpm_mat.")
+  
+  ## ── 1) x-axis positions ---------------------------------------------------
+  if (x_compact) {
+    axis_pos <- c("4" = 1, "7" = 2, "10" = 3, "15" = 4)
+    x_label_pad <- 0.10
+  } else {
+    axis_pos <- c("4" = 1, "7" = 2.5, "10" = 4, "15" = 5.5)
+    x_label_pad <- 0.15
+  }
+  
+  ## ── 2) Metadata -----------------------------------------------------------
+  metadata <- meta_df |>
+    tibble::rownames_to_column("sample_id") |>
+    dplyr::select(sample_id, genotype, timepoint) |>
+    dplyr::mutate(
+      timepoint = as.numeric(as.character(timepoint)),
+      axis_x    = axis_pos[as.character(timepoint)]
+    )
+  
+  ## ── 3) CPM subset ---------------------------------------------------------
+  sub_mat <- cpm_mat[present, , drop = FALSE]
+  
+  ## ── 4) per-sample metric --------------------------------------------------
+  expr_df <- as.data.frame(sub_mat) |>
+    tibble::rownames_to_column("Gene") |>
+    tidyr::pivot_longer(-Gene, names_to = "sample_id", values_to = "CPM") |>
+    dplyr::left_join(metadata, by = "sample_id") |>
+    dplyr::group_by(sample_id, genotype, timepoint, axis_x)
+  
+  expr_df <- dplyr::summarise(
+    expr_df,
+    value = dplyr::case_when(
+      expression_metric == "zscore"     ~ NA_real_,
+      expression_metric == "mean_cpm"   ~ mean(CPM, na.rm = TRUE),
+      expression_metric == "median_cpm" ~ stats::median(CPM, na.rm = TRUE)
+    ),
+    .groups = "drop"
+  )
+  
+  if (expression_metric == "zscore") {
+    z_row <- function(m) t(scale(t(m), center = TRUE, scale = TRUE))
+    z_mat <- z_row(log2(sub_mat + 1))
+    expr_df <- as.data.frame(z_mat) |>
+      tibble::rownames_to_column("Gene") |>
+      tidyr::pivot_longer(-Gene, names_to = "sample_id", values_to = "value") |>
+      dplyr::left_join(metadata, by = "sample_id") |>
+      dplyr::group_by(sample_id, genotype, timepoint, axis_x) |>
+      dplyr::summarise(value = mean(value, na.rm = TRUE), .groups = "drop")
+  }
+  
+  ## ── 5) Mean ± SE ----------------------------------------------------------
+  summary_df <- expr_df |>
+    dplyr::group_by(genotype, timepoint, axis_x) |>
+    dplyr::summarise(
+      mean_val = mean(value),
+      se_val   = stats::sd(value) / sqrt(dplyr::n()),
+      .groups  = "drop"
+    )
+  
+  ## ── 6) Genotype labels ----------------------------------------------------
+  last_x <- max(summary_df$axis_x)
+  labs_df <- summary_df |>
+    dplyr::filter(axis_x == last_x) |>
+    dplyr::select(genotype, mean_val) |>
+    dplyr::mutate(
+      x = last_x + x_label_pad,
+      y = mean_val
+    )
+  if (abs(diff(labs_df$y)) < 0.06) labs_df$y <- labs_df$y + c(+0.03, -0.03)
+  
+  ## ── 7) Palette ------------------------------------------------------------
+  pal <- c("D21" = "royalblue3", "T21" = "red3")
+  
+  ## ── 8) Plot ---------------------------------------------------------------
+  p <- ggplot2::ggplot() +
+    {if (expression_metric == "zscore")
+      ggplot2::geom_hline(yintercept = 0, linetype = "dashed",
+                          colour = "black", linewidth = 0.3)
+      else ggplot2::geom_blank()} +
+    ggplot2::geom_ribbon(
+      data = summary_df,
+      ggplot2::aes(x = axis_x,
+                   ymin = mean_val - se_val,
+                   ymax = mean_val + se_val,
+                   fill = genotype, group = genotype),
+      alpha = 0.30) +
+    ggplot2::geom_errorbar(
+      data = summary_df,
+      ggplot2::aes(x = axis_x,
+                   ymin = mean_val - se_val,
+                   ymax = mean_val + se_val,
+                   colour = genotype),
+      width = 0.15, linewidth = 0.8) +
+    ggplot2::geom_line(
+      data = summary_df,
+      ggplot2::aes(x = axis_x, y = mean_val,
+                   colour = genotype, group = genotype),
+      linewidth = 0.9) +
+    ggplot2::geom_point(
+      data = summary_df,
+      ggplot2::aes(x = axis_x, y = mean_val, colour = genotype),
+      size = 2.5) +
+    ggplot2::geom_jitter(
+      data = expr_df,
+      ggplot2::aes(x = axis_x, y = value, colour = genotype),
+      width = 0.08, alpha = 0.7, size = 1.5) +
+    ggplot2::geom_text(
+      data = labs_df,
+      ggplot2::aes(x = x, y = y, label = genotype, colour = genotype),
+      family = "Helvetica Neue", size = 5.5, hjust = 0,
+      show.legend = FALSE) +
+    ggplot2::scale_colour_manual(values = pal) +
+    ggplot2::scale_fill_manual(values = pal) +
+    ggplot2::scale_x_continuous(
+      breaks = axis_pos,
+      labels = c("Day 4", "Day 7", "Day 10", "Day 15"),
+      limits = c(min(axis_pos) - 0.2, max(axis_pos) + x_label_pad + 0.1),
+      expand = c(0, 0)) +
+    ggplot2::labs(
+      title    = plot_title,
+      subtitle = paste0(length(present), " genes / ", length(genes_vec),
+                        " queried | metric = ", expression_metric),
+      y        = switch(expression_metric,
+                        "zscore"     = expression(bar(z)~"["~log[2](CPM+1)~"]"),
+                        "mean_cpm"   = "Mean CPM",
+                        "median_cpm" = "Median CPM")) +
+    ggplot2::theme_minimal(base_family = "Helvetica Neue") +
+    ggplot2::theme(
+      axis.title.x   = ggplot2::element_blank(),
+      axis.title.y   = ggplot2::element_text(size = 14),
+      axis.text.x    = ggplot2::element_text(size = 14,angle=45),
+      axis.text.y    = ggplot2::element_text(size = 14),
+      plot.title     = ggplot2::element_text(size = 16, hjust = 0),
+      plot.subtitle  = ggplot2::element_text(size = 12, hjust = 0),
+      legend.position = "none",
+      plot.margin = ggplot2::margin(t = 5, r = 17.5, b = 5, l = 5)) +
+    ggplot2::coord_cartesian(
+      ylim = c(
+        if (expression_metric == "zscore")
+          min(summary_df$mean_val - summary_df$se_val) * 1.05 else 0,
+        max(summary_df$mean_val + summary_df$se_val) * 1.08),
+      clip = "off")
+  
+  ## ── 9) Save plot if requested --------------------------------------------
+  if (!is.null(save_path)) {
+    ggplot2::ggsave(
+      filename = save_path,
+      plot = p,
+      width = 4.5,
+      height = 3,
+      units = "in",
+      dpi = 500,
+      device = "svg"
+    )
+  }
+  
+  return(p)
+}
+
+#############
+
+smooth_muscle_cell_differentiation_go_terms<-c('GO:0051145','GO:0060539')
+lung_development_go_term<-c('GO:0030324')
+chondrocyte_go_term<-c('GO:0002063')
+
+smooth_muscle_cell_differentiation_genes <- extract_GO_genes(smooth_muscle_cell_differentiation_go_terms)
+smooth_muscle_cell_differentiation_go_compiled <- compile_unique_genes(smooth_muscle_cell_differentiation_genes)
+
+lung_development_go_genes <- extract_GO_genes(lung_development_go_term)
+
+chondrocyte_go_genes <- extract_GO_genes(chondrocyte_go_term)
+
+#############
+
+lineplot_smooth_muscle <- tmm_lineplot(
+  genes_vec = smooth_muscle_cell_differentiation_go_compiled,
+  cpm_mat = rm_vst_counts,
+  meta_df = rm_metadata,
+  expression_metric = "zscore",
+  plot_title = "Smooth Muscle Cell Differentiation",
+  save_path = "smooth_muscle_differentiation_lineplot.svg",
+  x_compact = TRUE
+)
+
+lineplot_lung_dev <- tmm_lineplot(
+  genes_vec = lung_development_go_genes,
+  cpm_mat = rm_vst_counts,
+  meta_df = rm_metadata,
+  expression_metric = "zscore",
+  plot_title = "Lung Development",
+  save_path = "Lung Development.svg",
+  x_compact = TRUE
+)
+
+lineplot_chondrocyte_dev <- tmm_lineplot(
+  genes_vec = chondrocyte_go_genes,
+  cpm_mat = rm_vst_counts,
+  meta_df = rm_metadata,
+  expression_metric = "zscore",
+  plot_title = "Chondrocyte Development",
+  save_path = "Chondrocyte Development.svg",
+  x_compact = TRUE
+)
+
+#################
+
+combined_lineplots <- lineplot_smooth_muscle | lineplot_lung_dev | lineplot_chondrocyte_dev
+
+# Add shared title if desired
+combined_lineplots <- combined_lineplots + 
+  plot_annotation(
+    title = "Gene Expression Patterns Across Differentiation",
+    theme = theme(
+      plot.title = element_text(size = 18, face = "bold", hjust = 0.5, family = "Helvetica Neue")
+    )
+  )
+
+# Display combined plot
+print(combined_lineplots)
+
+ggsave("1-figures/differential_gene_expression/combined_lineplots_grid.svg", 
+       plot = combined_lineplots, 
+       width = 12, 
+       height = 4, 
+       dpi = 300)
+
+```
+
+```{r go terms}
+
+deg_day4 <- readRDS('deg_day4_T21_vs_D21_apeglm.RDS')
+deg_day7 <- readRDS('deg_day7_T21_vs_D21_apeglm.RDS')
+deg_day10 <- readRDS('deg_day10_T21_vs_D21_apeglm.RDS')
+deg_day15 <- readRDS('deg_day15_T21_vs_D21_apeglm.RDS')
+
+
+rm_raw_counts
+run_GO_and_plot <- function(deg_df,
+                            direction = "both",
+                            log2fc_threshold = 0.5,
+                            padj_threshold = 0.05,
+                            raw_counts = NULL,
+                            min_count = 10,
+                            min_samples = 3,
+                            universe = NULL,
+                            ont = "BP",
+                            organism = "human",
+                            qval_cutoff = 0.05,
+                            simplify_cutoff = 0.7,
+                            top_n = 10,
+                            up_color = "red3",
+                            down_color = "royalblue3",
+                            wrap_width = 35,
+                            save_plot = FALSE,
+                            save_path = "GO_dotplot.svg") {
+  
+  if (organism == "mouse") {
+    require(org.Mm.eg.db)
+    OrgDb <- org.Mm.eg.db
+  } else {
+    require(org.Hs.eg.db)
+    OrgDb <- org.Hs.eg.db
+  }
+  
+  required_cols <- c("gene_id", "log2FoldChange", "padj")
+  if (!all(required_cols %in% colnames(deg_df))) {
+    stop("DEG dataframe must contain columns: gene_id, log2FoldChange, padj")
+  }
+  
+  if (!is.null(raw_counts)) {
+    genes_passing <- rowSums(raw_counts >= min_count) >= min_samples
+    universe <- rownames(raw_counts)[genes_passing]
+  }
+  
+  sig_genes <- deg_df %>%
+    dplyr::filter(!is.na(padj), 
+                  padj < padj_threshold,
+                  abs(log2FoldChange) > log2fc_threshold)
+  
+  run_single_GO <- function(gene_list) {
+    if (!is.null(universe)) {
+      gene_list <- intersect(gene_list, universe)
+    }
+    
+    gene_entrez <- bitr(gene_list, 
+                        fromType = "SYMBOL",
+                        toType = "ENTREZID",
+                        OrgDb = OrgDb)
+    
+    universe_entrez <- NULL
+    if (!is.null(universe)) {
+      universe_entrez <- bitr(universe,
+                              fromType = "SYMBOL",
+                              toType = "ENTREZID",
+                              OrgDb = OrgDb)$ENTREZID
+    }
+    
+    ego <- enrichGO(gene = gene_entrez$ENTREZID,
+                    universe = universe_entrez,
+                    OrgDb = OrgDb,
+                    ont = ont,
+                    pAdjustMethod = "BH",
+                    pvalueCutoff = qval_cutoff,
+                    qvalueCutoff = qval_cutoff,
+                    readable = TRUE)
+    
+    if (nrow(ego@result) > 0) {
+      ego_simplify <- clusterProfiler::simplify(ego, cutoff = simplify_cutoff)
+      return(as.data.frame(ego_simplify))
+    } else {
+      return(data.frame())
+    }
+  }
+  
+  create_dotplot <- function(df, color, title_text, position = "right", legend_position = "bottom") {
+    if (nrow(df) == 0) {
+      return(ggplot() + 
+               theme_void() + 
+               ggtitle(paste(title_text, "- No significant terms")))
+    }
+    
+    df_top <- df %>%
+      dplyr::slice_head(n = top_n) %>%
+      dplyr::mutate(Description = stringr::str_wrap(Description, wrap_width))
+    
+    p <- ggplot(df_top,
+                aes(x = -log10(pvalue),
+                    y = reorder(Description, -log10(pvalue)),
+                    size = Count)) +
+      geom_point(color = color, alpha = 0.8) +
+      scale_size_continuous(range = c(3, 8), name = "Gene count") +
+      scale_y_discrete(position = position) +
+      labs(x = expression("-log"[10] * "(p-value)"),
+           y = NULL,
+           title = title_text) +
+      theme_minimal(base_family = "Helvetica Neue") +
+      theme(
+        plot.title = element_text(size = 14, hjust = 0.5, family = "Helvetica Neue"),
+        axis.title.x = element_text(size = 12, family = "Helvetica Neue"),
+        axis.text.y = element_text(size = 10, family = "Helvetica Neue"),
+        axis.text.x = element_text(size = 10, family = "Helvetica Neue"),
+        legend.position = legend_position,
+        legend.title = element_text(size = 10, family = "Helvetica Neue"),
+        legend.text = element_text(size = 9, family = "Helvetica Neue")
+      )
+    
+    if (position == "left") {
+      p <- p + scale_x_reverse()
+    }
+    
+    return(p)
+  }
+  
+  if (direction == "both") {
+    up_genes <- sig_genes %>%
+      dplyr::filter(log2FoldChange > 0) %>%
+      dplyr::pull(gene_id)
+    
+    down_genes <- sig_genes %>%
+      dplyr::filter(log2FoldChange < 0) %>%
+      dplyr::pull(gene_id)
+    
+    go_up <- run_single_GO(up_genes)
+    go_down <- run_single_GO(down_genes)
+    
+    plot_up <- create_dotplot(go_up, up_color, "Upregulated", "right", legend_position = "right")
+    plot_down <- create_dotplot(go_down, down_color, "Downregulated", "left", legend_position = "left")
+    
+    combined_plot <- plot_down | plot_up
+    combined_plot <- combined_plot + 
+      plot_annotation(title = "GO Enrichment Analysis",
+                      theme = theme(plot.title = element_text(size = 16, 
+                                                              face = "bold", 
+                                                              hjust = 0.5,
+                                                              family = "Helvetica Neue")))
+    
+    print(combined_plot)
+    
+    if (save_plot) {
+      ggsave(save_path, plot = combined_plot, width = 10, height = 5, dpi = 400)
+    }
+    
+    return(list(enrichment = list(up = go_up, down = go_down),
+                plot = combined_plot))
+    
+  } else if (direction == "up") {
+    gene_list <- sig_genes %>%
+      dplyr::filter(log2FoldChange > 0) %>%
+      dplyr::pull(gene_id)
+    
+    go_result <- run_single_GO(gene_list)
+    plot_result <- create_dotplot(go_result, up_color, "Upregulated GO Terms", legend_position = "bottom")
+    
+    print(plot_result)
+    
+    if (save_plot) {
+      ggsave(save_path, plot = plot_result, width = 5, height = 5, dpi = 300)
+    }
+    
+    return(list(enrichment = go_result, plot = plot_result))
+    
+  } else if (direction == "down") {
+    gene_list <- sig_genes %>%
+      dplyr::filter(log2FoldChange < 0) %>%
+      dplyr::pull(gene_id)
+    
+    go_result <- run_single_GO(gene_list)
+    plot_result <- create_dotplot(go_result, down_color, "Downregulated GO Terms", legend_position = "bottom")
+    
+    print(plot_result)
+    
+    if (save_plot) {
+      ggsave(save_path, plot = plot_result, width = 5, height = 5, dpi = 400)
+    }
+    
+    return(list(enrichment = go_result, plot = plot_result))
+  }
+}
+##################
+
+# Run GO enrichment for Day 4
+result_day4 <- run_GO_and_plot(
+  deg_df = deg_day4,
+  direction = "both",
+  log2fc_threshold = 0.5,
+  padj_threshold = 0.05,
+  raw_counts = NULL,
+  min_count = 10,
+  min_samples = 3,
+  universe = NULL,
+  ont = "BP",
+  organism = "human",
+  qval_cutoff = 0.05,
+  simplify_cutoff = 0.7,
+  top_n = 10,
+  up_color = "red3",
+  down_color = "royalblue3",
+  wrap_width = 35,
+  save_plot = TRUE,
+  save_path = "1-figures/differential_gene_expression/GO_enrichment_day4.svg"
+)
+
+# Run GO enrichment for Day 7
+result_day7 <- run_GO_and_plot(
+  deg_df = deg_day7,
+  direction = "both",
+  log2fc_threshold = 0.5,
+  padj_threshold = 0.05,
+  raw_counts = NULL,
+  min_count = 10,
+  min_samples = 3,
+  universe = NULL,
+  ont = "BP",
+  organism = "human",
+  qval_cutoff = 0.05,
+  simplify_cutoff = 0.7,
+  top_n = 10,
+  up_color = "red3",
+  down_color = "royalblue3",
+  wrap_width = 35,
+  save_plot = TRUE,
+  save_path = "1-figures/differential_gene_expression/GO_enrichment_day7.svg"
+)
+
+# Run GO enrichment for Day 10
+result_day10 <- run_GO_and_plot(
+  deg_df = deg_day10,
+  direction = "both",
+  log2fc_threshold = 0.5,
+  padj_threshold = 0.05,
+  raw_counts = NULL,
+  min_count = 10,
+  min_samples = 3,
+  universe = NULL,
+  ont = "BP",
+  organism = "human",
+  qval_cutoff = 0.05,
+  simplify_cutoff = 0.7,
+  top_n = 10,
+  up_color = "red3",
+  down_color = "royalblue3",
+  wrap_width = 35,
+  save_plot = TRUE,
+  save_path = "1-figures/differential_gene_expression/GO_enrichment_day10.svg"
+)
+
+# Run GO enrichment for Day 15
+result_day15 <- run_GO_and_plot(
+  deg_df = deg_day15,
+  direction = "both",
+  log2fc_threshold = 0.5,
+  padj_threshold = 0.05,
+  raw_counts = NULL,
+  min_count = 10,
+  min_samples = 3,
+  universe = NULL,
+  ont = "BP",
+  organism = "human",
+  qval_cutoff = 0.05,
+  simplify_cutoff = 0.7,
+  top_n = 10,
+  up_color = "red3",
+  down_color = "royalblue3",
+  wrap_width = 35,
+  save_plot = TRUE,
+  save_path = "1-figures/differential_gene_expression/GO_enrichment_day15.svg"
+)
+
+
+```
+
+```{r combined go term overlap dotplot}
+
+
+# Store results in a list structure similar to your example
+results_list <- list(
+  day4 = result_day4,
+  day7 = result_day7,
+  day10 = result_day10,
+  day15 = result_day15
+)
+
+create_shared_GO_dotplot <- function(results_list, regulation_type = "upregulated", min_timepoints = 3, top_n = 20) {
+  
+  timepoints <- c("4", "7", "10", "15")
+  go_list <- list()
+  
+  # Extract GO data for each timepoint
+  for (i in seq_along(timepoints)) {
+    if (regulation_type == "upregulated") {
+      go_data <- results_list[[i]]$enrichment$up
+    } else {
+      go_data <- results_list[[i]]$enrichment$down
+    }
+    
+    if (!is.null(go_data) && nrow(go_data) > 0) {
+      # Extract GO term size from BgRatio
+      go_data$GO_size <- as.numeric(gsub("/.*", "", go_data$BgRatio))
+      go_data$Count_percent <- (go_data$Count / go_data$GO_size) * 100
+      go_data$Timepoint <- timepoints[i]
+      go_list[[timepoints[i]]] <- go_data
+    }
+  }
+  
+  # Find GO terms that appear in at least min_timepoints
+  all_go_data <- bind_rows(go_list)
+  term_counts <- all_go_data %>%
+    dplyr::group_by(Description) %>%
+    dplyr::summarise(n_timepoints = n_distinct(Timepoint)) %>%
+    dplyr::filter(n_timepoints >= min_timepoints)
+  
+  if (nrow(term_counts) == 0) {
+    message(paste("No", regulation_type, "GO terms appear in", min_timepoints, "or more timepoints"))
+    return(list(plot = NULL, data = NULL))
+  }
+  
+  # Filter to shared terms
+  shared_go_data <- all_go_data %>%
+    dplyr::filter(Description %in% term_counts$Description)
+  
+  # Calculate mean p-value for ordering and select top N
+  term_stats <- shared_go_data %>%
+    dplyr::group_by(Description) %>%
+    dplyr::summarise(
+      mean_pval = mean(pvalue),
+      mean_count = mean(Count),
+      n_timepoints = n_distinct(Timepoint)
+    ) %>%
+    dplyr::arrange(mean_pval) %>%
+    dplyr::slice_head(n = top_n)
+  
+  term_order <- term_stats$Description
+  
+  # Filter to top N terms
+  plot_data <- shared_go_data %>%
+    dplyr::filter(Description %in% term_order) %>%
+    dplyr::mutate(
+      neg_log10_pvalue = -log10(pvalue),
+      Description = factor(Description, levels = rev(term_order)),
+      Timepoint = factor(Timepoint, levels = c("4", "7", "10", "15"))
+    )
+  
+  # Add missing timepoint combinations as NA
+  complete_data <- expand.grid(
+    Description = unique(plot_data$Description),
+    Timepoint = factor(c("4", "7", "10", "15"), levels = c("4", "7", "10", "15"))
+  )
+  
+  plot_data_complete <- complete_data %>%
+    dplyr::left_join(plot_data, by = c("Description", "Timepoint"))
+  
+  # Create color based on regulation type
+  dot_color <- ifelse(regulation_type == "upregulated", "red3", "royalblue3")
+  
+  # Create dotplot
+  p <- ggplot(plot_data_complete, aes(x = Timepoint, y = Description)) +
+    geom_point(data = subset(plot_data_complete, !is.na(Count)),
+               aes(size = Count_percent, alpha = neg_log10_pvalue),
+               color = dot_color) +
+    geom_point(data = subset(plot_data_complete, is.na(Count)),
+               shape = 4, size = 2, color = "gray80") +  # X for missing data
+    scale_size_continuous(
+      name = "% DEGs in GO",
+      range = c(2, 10),
+      breaks = c(5, 10, 15, 20, 25)
+    ) +
+    scale_alpha_continuous(
+      name = expression("-log"[10]*"(p-value)"),
+      range = c(0.3, 1)
+    ) +
+    scale_x_discrete(labels = c("4" = "Day 4", "7" = "Day 7", "10" = "Day 10", "15" = "Day 15")) +
+    theme_minimal(base_family = "Helvetica Neue") +
+    theme(
+      axis.text.y = element_text(size = 10, family = "Helvetica Neue"),
+      axis.text.x = element_text(size = 11, angle = 45, hjust = 1, family = "Helvetica Neue"),
+      axis.title = element_blank(),
+      legend.position = "right",
+      legend.title = element_text(size = 10, family = "Helvetica Neue"),
+      legend.text = element_text(size = 9, family = "Helvetica Neue"),
+      plot.title = element_text(size = 14, face = "bold", hjust = 0.5, family = "Helvetica Neue")
+    ) +
+    labs(
+      title = paste(tools::toTitleCase(regulation_type), "GO Terms (≥", min_timepoints, "timepoints)")
+    )
+  
+  return(list(
+    plot = p, 
+    data = plot_data_complete,
+    n_shared = nrow(term_counts)
+  ))
+}
+
+# Generate plots for terms in 3+ timepoints
+upregulated_3plus <- create_shared_GO_dotplot(results_list, "upregulated", min_timepoints = 3, top_n = 15)
+downregulated_3plus <- create_shared_GO_dotplot(results_list, "downregulated", min_timepoints = 3, top_n = 15)
+
+# Combine plots
+combined_go_3plus <- upregulated_3plus$plot / downregulated_3plus$plot +
+  plot_annotation(
+    title = "GO Terms Shared Across ≥3 Timepoints",
+    subtitle = "T21 vs D21 comparisons",
+    theme = theme(
+      plot.title = element_text(size = 16, face = "bold", hjust = 0.5, family = "Helvetica Neue"),
+      plot.subtitle = element_text(size = 12, hjust = 0.5, family = "Helvetica Neue")
+    )
+  )
+
+print(combined_go_3plus)
+
+ggsave("1-figures/differential_gene_expression/GO_shared_3plus_timepoints.svg",
+       plot = combined_go_3plus,
+       width = 12,
+       height = 14,
+       dpi = 300)
+
+# Also check for terms in all 4 timepoints
+upregulated_all4 <- create_shared_GO_dotplot(results_list, "upregulated", min_timepoints = 4, top_n = 10)
+downregulated_all4 <- create_shared_GO_dotplot(results_list, "downregulated", min_timepoints = 4, top_n = 10)
+
+if (!is.null(upregulated_all4$plot) || !is.null(downregulated_all4$plot)) {
+  combined_go_all4 <- (upregulated_all4$plot %||% ggplot() + theme_void()) / 
+                       (downregulated_all4$plot %||% ggplot() + theme_void()) +
+    plot_annotation(
+      title = "GO Terms Shared Across All 4 Timepoints",
+      subtitle = "T21 vs D21 comparisons",
+      theme = theme(
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5, family = "Helvetica Neue"),
+        plot.subtitle = element_text(size = 12, hjust = 0.5, family = "Helvetica Neue")
+      )
+    )
+  
+  print(combined_go_all4)
+  
+  ggsave("1-figures/differential_gene_expression/GO_shared_all4_timepoints.svg",
+         plot = combined_go_all4,
+         width = 12,
+         height = 10,
+         dpi = 300)
+}
+
+```
+
+```{r gsea function}
+
+library(fgsea)
+library(ggplot2)
+library(dplyr)
+library(biomaRt)
+library(GO.db)
+library(org.Hs.eg.db)
+
+run_GO_GSEA <- function(deg_df, go_id, organism = "human", plot_title = NULL) {
+  
+  # Get organism-specific database
+  if (organism == "human") {
+    OrgDb <- org.Hs.eg.db
+    mart <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+  } else if (organism == "mouse") {
+    OrgDb <- org.Mm.eg.db
+    mart <- useMart("ensembl", dataset = "mmusculus_gene_ensembl")
+  }
+  
+  # Get genes in GO term
+  genes_in_go <- AnnotationDbi::select(OrgDb,
+                                       keys = go_id,
+                                       columns = c("SYMBOL"),
+                                       keytype = "GOALL")
+  
+  go_gene_set <- unique(genes_in_go$SYMBOL)
+  
+  # Get GO term name
+  go_term_name <- tryCatch({
+    Term(go_id)
+  }, error = function(e) {
+    go_id
+  })
+  
+  # Prepare ranked gene list
+  ranked_genes <- deg_df %>%
+    dplyr::filter(!is.na(log2FoldChange)) %>%
+    dplyr::arrange(desc(log2FoldChange))
+  
+  gene_list <- ranked_genes$log2FoldChange
+  names(gene_list) <- ranked_genes$gene_id
+  
+  # Remove duplicates
+  gene_list <- gene_list[!duplicated(names(gene_list))]
+  
+  # Create pathway list
+  pathways <- list()
+  pathways[[go_term_name]] <- go_gene_set
+  
+  # Run GSEA
+  set.seed(42)
+  gsea_results <- fgsea(pathways = pathways,
+                        stats = gene_list,
+                        minSize = 10,
+                        maxSize = 500,
+                        nperm = 10000)
+  
+  # Extract statistics
+  enrichment_score <- gsea_results$ES[1]
+  nes <- gsea_results$NES[1]
+  pval <- gsea_results$pval[1]
+  padj <- gsea_results$padj[1]
+  n_genes_in_pathway <- length(intersect(go_gene_set, names(gene_list)))
+  
+  # Calculate running enrichment score
+  gene_set_positions <- which(names(gene_list) %in% go_gene_set)
+  
+  if (length(gene_set_positions) == 0) {
+    stop("No genes from GO term found in DEG data")
+  }
+  
+  # Calculate running score
+  n_genes <- length(gene_list)
+  running_score <- numeric(n_genes)
+  max_deviation <- 0
+  
+  hits <- names(gene_list) %in% go_gene_set
+  n_hits <- sum(hits)
+  n_miss <- n_genes - n_hits
+  
+  if (n_hits == 0 || n_miss == 0) {
+    stop("Invalid gene set")
+  }
+  
+  increment <- 1 / n_hits
+  decrement <- -1 / n_miss
+  
+  cumsum_score <- 0
+  for (i in 1:n_genes) {
+    if (hits[i]) {
+      cumsum_score <- cumsum_score + increment
+    } else {
+      cumsum_score <- cumsum_score + decrement
+    }
+    running_score[i] <- cumsum_score
+    if (abs(cumsum_score) > abs(max_deviation)) {
+      max_deviation <- cumsum_score
+    }
+  }
+  
+  # Create plot data
+  plot_df <- data.frame(
+    rank = 1:n_genes,
+    running_score = running_score,
+    in_pathway = hits
+  )
+  
+  # Find peak
+  peak_idx <- which.max(abs(running_score))
+  
+  # Create enrichment plot
+  if (is.null(plot_title)) {
+    plot_title <- paste0("GSEA: ", go_term_name, "\n(", go_id, ")")
+  }
+  
+  p1 <- ggplot(plot_df, aes(x = rank, y = running_score)) +
+    geom_line(color = "darkgreen", size = 1.2) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
+    geom_vline(xintercept = peak_idx, linetype = "dotted", color = "red", alpha = 0.5) +
+    labs(x = NULL, 
+         y = "Enrichment Score",
+         title = plot_title,
+         subtitle = paste0("NES = ", round(nes, 3), 
+                          ", p-value = ", formatC(pval, format = "e", digits = 2),
+                          ", FDR = ", round(padj, 3),
+                          "\n", n_genes_in_pathway, " genes in pathway")) +
+    theme_minimal(base_family = "Helvetica Neue") +
+    theme(axis.text.x = element_blank(),
+          axis.ticks.x = element_blank(),
+          plot.title = element_text(size = 14, face = "bold"),
+          plot.subtitle = element_text(size = 10))
+  
+  # Create gene hit plot
+  hit_positions <- data.frame(
+    x = which(hits),
+    y = 0
+  )
+  
+  p2 <- ggplot(hit_positions, aes(x = x, y = y)) +
+    geom_segment(aes(xend = x, yend = 0.8), size = 0.3, color = "black") +
+    ylim(-0.1, 1) +
+    xlim(1, n_genes) +
+    labs(x = NULL, y = NULL) +
+    theme_minimal(base_family = "Helvetica Neue") +
+    theme(axis.text = element_blank(),
+          axis.ticks = element_blank(),
+          panel.grid = element_blank())
+  
+  # Create ranked list plot
+  p3 <- ggplot(plot_df, aes(x = rank, y = 1:n_genes)) +
+    geom_tile(aes(fill = gene_list[1:n_genes]), width = 1, height = n_genes) +
+    scale_fill_gradient2(low = "blue", mid = "white", high = "red", 
+                         midpoint = 0, name = "log2FC") +
+    labs(x = "Rank in Ordered Gene List", y = NULL) +
+    theme_minimal(base_family = "Helvetica Neue") +
+    theme(axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          legend.position = "bottom",
+          legend.key.width = unit(1, "cm"),
+          legend.key.height = unit(0.3, "cm"))
+  
+  # Combine plots
+  combined_plot <- p1 / p2 / p3 + 
+    plot_layout(heights = c(3, 0.5, 0.5))
+  
+  return(list(
+    plot = combined_plot,
+    stats = gsea_results,
+    genes_in_pathway = intersect(go_gene_set, names(gene_list)),
+    running_score = plot_df
+  ))
+}
+
+# Example usage
+result <- run_GO_GSEA(deg_df = deg_day7, 
+                      go_id = "GO:0007507",  # heart development
+                      organism = "human")
+
+print(result$plot)
+
+# Save plot
+ggsave("1-figures/differential_gene_expression/GSEA_GO0007507_day7.svg",
+       plot = result$plot,
+       width = 8,
+       height = 10,
+       dpi = 300)
+
+# Run for multiple timepoints
+go_id <- "GO:0007507"  # heart development
+
+for (i in c(4, 7, 10, 15)) {
+  deg_df <- get(paste0("deg_day", i))
+  result <- run_GO_GSEA(deg_df = deg_df, 
+                        go_id = go_id,
+                        plot_title = paste0("Day ", i, " - Heart Development"))
+  
+  ggsave(paste0("1-figures/differential_gene_expression/GSEA_", go_id, "_day", i, ".svg"),
+         plot = result$plot,
+         width = 8,
+         height = 10,
+         dpi = 300)
+}
+
+```
+
+```{r heatmap and clustering lineplots}
+
+
+# Load required libraries ------------------------------------------------------
+library(pheatmap)
+library(RColorBrewer)
+library(dplyr)
+library(ggplot2)
+library(dplyr)
+library(patchwork)
+library(matrixStats)
+
+
+# Prepare data -----------------------------------------------------------------
+# Z-score transform function
+z_score_row <- function(x) {
+  t(apply(x, 1, function(row) (row - mean(row, na.rm = TRUE)) / sd(row, na.rm = TRUE)))
+}
+
+# Apply z-score transformation
+RM_vst_counts_z <- z_score_row(rm_vst_counts)
+RM_vst_counts_z_sub <- RM_vst_counts_z[rownames(RM_vst_counts_z) %in% smooth_muscle_cell_differentiation_go_compiled, ]
+
+# Rename columns for clarity
+colnames(RM_vst_counts_z_sub) <- rm_metadata$group_id_new
+
+# Hierarchical clustering and cluster assignment -------------------------------
+hc <- hclust(dist(RM_vst_counts_z_sub))
+clusters <- cutree(hc, k = 2)
+
+# Create annotations -----------------------------------------------------------
+# Column annotations
+annotation_col <- data.frame(
+  Genotype = factor(rm_metadata$genotype, levels = c("D21", "T21")),
+  Timepoint = factor(rm_metadata$timepoint, levels = c("4", "7", "10", "15")),
+  row.names = rm_metadata$group_id_new
+)
+
+# Row annotations
+annotation_row <- data.frame(
+  Cluster = factor(paste0("M", clusters), levels = c("M1", "M2")),
+  row.names = names(clusters)
+)
+
+# Define color schemes ---------------------------------------------------------
+# Annotation colors
+ann_colors <- list(
+  Genotype = c(D21 = "royalblue3", T21 = "red3"),
+  Timepoint = c("4" = "#e12729", "7" = "#f37324", "10" = "#f8cc1b", "15" = "#72b043"),
+  Cluster = c(M1 = "#E41A1C", M2 = "#377EB8")
+)
+
+# Heatmap color palette
+color_palette <- colorRampPalette(c("#053061", "#2166AC", "#4393C3", "#92C5DE", 
+                                    "#D1E5F0", "#FDDBC7", "#F4A582", "#D6604D", 
+                                    "#B2182B", "#67001F"))(100)
+
+# Order samples ----------------------------------------------------------------
+# Order by genotype first (D21, then T21), then by timepoint within each
+column_order <- with(annotation_col, order(Genotype, Timepoint))
+RM_vst_counts_z_sub_ordered <- RM_vst_counts_z_sub[, column_order]
+annotation_col_ordered <- annotation_col[column_order, , drop = FALSE]
+
+# Calculate gaps for visual separation ----------------------------------------
+# Find where genotype changes for column gaps
+genotype_table <- table(annotation_col_ordered$Genotype)
+gaps_col <- cumsum(genotype_table)[-length(genotype_table)]
+
+# For row gaps with clustering, we need to use cutree_rows parameter
+# or let pheatmap handle it with the annotation
+
+# Gene labeling ----------------------------------------------------------------
+labels_row <- rownames(RM_vst_counts_z_sub_ordered)
+
+# Calculate number of genes for dynamic title
+n_genes <- nrow(RM_vst_counts_z_sub_ordered)
+plot_title <- paste0("Smooth Muscle Differentiation: T21 vs D21 Across Timepoints (n=", n_genes, ")")
+
+# Create the pheatmap ----------------------------------------------------------
+p <- pheatmap(
+  RM_vst_counts_z_sub_ordered,
+  color = viridis(100),
+  cluster_rows = TRUE,
+  cluster_cols = FALSE,
+  clustering_method = "complete",
+  cutree_rows = 2,  # This creates gaps between 2 clusters
+  annotation_col = annotation_col_ordered,
+  annotation_row = annotation_row,
+  annotation_colors = ann_colors,
+  gaps_col = gaps_col,
+  show_rownames = TRUE,
+  show_colnames = FALSE,
+  labels_row = labels_row,
+  fontsize = 10,
+  fontsize_row = 8,
+  fontsize_col = 8,
+  fontfamily = "Helvetica Neue",
+  border_color = NA,
+  main = plot_title,
+  annotation_legend = TRUE,
+  legend = TRUE,
+  treeheight_row = 15,
+  treeheight_col = 0
+)
+print(p)
+
+# Load required libraries ------------------------------------------------------
+
+# Function to calculate cluster statistics -------------------------------------
+calculate_cluster_stats <- function(cluster_num, cluster_genes, vst_data, metadata) {
+  genes_in_cluster <- cluster_genes[[cluster_num]]
+  vst_subset <- vst_data[rownames(vst_data) %in% genes_in_cluster, ]
+  
+  # Z-score transform
+  vst_zscore <- t(scale(t(vst_subset)))
+  
+  # Calculate mean z-score per sample
+  mean_zscore_per_sample <- colMeans(vst_zscore, na.rm = TRUE)
+  
+  plot_data <- data.frame(
+    Sample = colnames(vst_subset),
+    Mean_Zscore = mean_zscore_per_sample,
+    stringsAsFactors = FALSE
+  )
+  
+  plot_data <- merge(plot_data, metadata, by.x = "Sample", by.y = "row.names")
+  
+  summary_stats <- plot_data %>%
+    dplyr::group_by(timepoint, genotype) %>%
+    dplyr::summarise(
+      Mean = mean(Mean_Zscore, na.rm = TRUE),
+      SE = sd(Mean_Zscore, na.rm = TRUE) / sqrt(n()),
+      N = n(),
+      .groups = 'drop'
+    ) %>%
+    dplyr::mutate(
+      Cluster = paste("Cluster", cluster_num),
+      timepoint = as.numeric(as.character(timepoint))
+    )
+  
+  return(summary_stats)
+}
+
+# Prepare cluster data ---------------------------------------------------------
+n_clusters <- 2
+cluster_genes_RM <- split(names(clusters), clusters)
+
+# Calculate stats for all clusters
+all_cluster_stats_RM <- do.call(rbind, lapply(1:n_clusters, function(i) {
+  calculate_cluster_stats(i, cluster_genes_RM, rm_vst_counts, rm_metadata)
+}))
+
+# Create plots for each cluster -----------------------------------------------
+plot_list_RM <- list()
+
+for(i in 1:n_clusters) {
+  cluster_data <- all_cluster_stats_RM %>% 
+    dplyr::filter(Cluster == paste("Cluster", i))
+  
+  n_genes <- length(cluster_genes_RM[[i]])
+  
+  p <- ggplot(cluster_data, aes(x = timepoint, y = Mean, color = genotype, group = genotype)) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "gray60", linewidth = 0.3) +
+    geom_ribbon(aes(ymin = Mean - SE, ymax = Mean + SE, fill = genotype), 
+                alpha = 0.2, color = NA) +
+    geom_line(linewidth = 1) +
+    geom_point(size = 2.5) +
+    scale_color_manual(values = c("D21" = "royalblue3", "T21" = "red3")) +
+    scale_fill_manual(values = c("D21" = "royalblue3", "T21" = "red3")) +
+    scale_x_continuous(
+      breaks = c(4, 7, 10, 15),
+      labels = c("D4", "D7", "D10", "D15")
+    ) +
+    labs(
+      title = paste0("M", i, " (n=", n_genes, " genes)"),
+      x = "Timepoint",
+      y = expression(bar(z)~"-score"),
+      color = "Genotype",
+      fill = "Genotype"
+    ) +
+    theme_bw() +
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 12, face = "bold", 
+                                family = "Helvetica Neue"),
+      axis.title = element_text(size = 11, family = "Helvetica Neue"),
+      axis.text = element_text(size = 10, family = "Helvetica Neue"),
+      legend.title = element_text(size = 11, family = "Helvetica Neue"),
+      legend.text = element_text(size = 10, family = "Helvetica Neue"),
+      panel.grid.minor = element_blank(),
+      text = element_text(family = "Helvetica Neue")
+    )
+  
+  plot_list_RM[[i]] <- p
+}
+
+# Combine plots ----------------------------------------------------------------
+combined_plot_RM <- wrap_plots(plot_list_RM, ncol = 1, nrow = 2) +
+  plot_layout(guides = 'collect') &
+  theme(legend.position = 'right')
+
+print(combined_plot_RM)
+
+# Save combined plot -----------------------------------------------------------
+ggsave("rm_cluster_lineplots.svg", 
+       plot = combined_plot_RM, 
+       width = 8, 
+       height = 8, 
+       dpi = 300)
+
+
+
+
+# heatmap of top variable genes
+
+# Load required libraries ------------------------------------------------------
+library(pheatmap)
+library(RColorBrewer)
+library(dplyr)
+library(ggplot2)
+library(patchwork)
+library(matrixStats)
+library(viridis)
+
+# Identify top 500 variable genes ---------------------------------------------
+# Calculate row variances across all samples
+gene_variances <- rowVars(as.matrix(rm_vst_counts))
+names(gene_variances) <- rownames(rm_vst_counts)
+
+# Get top 500 most variable genes
+top500_variable_genes <- names(sort(gene_variances, decreasing = TRUE)[1:500])
+
+# Prepare data for heatmap ----------------------------------------------------
+z_score_row <- function(x) {
+  t(apply(x, 1, function(row) (row - mean(row, na.rm = TRUE)) / sd(row, na.rm = TRUE)))
+}
+
+# Apply z-score transformation to top 500 genes
+RM_vst_counts_z <- z_score_row(rm_vst_counts)
+RM_vst_counts_z_sub <- RM_vst_counts_z[top500_variable_genes, ]
+
+# Rename columns
+colnames(RM_vst_counts_z_sub) <- rm_metadata$group_id_new
+
+# Hierarchical clustering ------------------------------------------------------
+hc <- hclust(dist(RM_vst_counts_z_sub))
+clusters <- cutree(hc, k = 4)  # Using 4 clusters for 500 genes
+
+# Create annotations -----------------------------------------------------------
+annotation_col <- data.frame(
+  Genotype = factor(rm_metadata$genotype, levels = c("D21", "T21")),
+  Timepoint = factor(rm_metadata$timepoint, levels = c("4", "7", "10", "15")),
+  row.names = rm_metadata$group_id_new
+)
+
+annotation_row <- data.frame(
+  Cluster = factor(paste0("M", clusters), levels = paste0("M", 1:4)),
+  row.names = names(clusters)
+)
+
+# Define color schemes ---------------------------------------------------------
+ann_colors <- list(
+  Genotype = c(D21 = "royalblue3", T21 = "red3"),
+  Timepoint = c("4" = "#e12729", "7" = "#f37324", "10" = "#f8cc1b", "15" = "#72b043"),
+  Cluster = c(M1 = "#E41A1C", M2 = "#377EB8", M3 = "#4DAF4A", M4 = "#984EA3")
+)
+
+color_palette <- colorRampPalette(c("#053061", "#2166AC", "#4393C3", "#92C5DE", 
+                                    "#D1E5F0", "#FDDBC7", "#F4A582", "#D6604D", 
+                                    "#B2182B", "#67001F"))(100)
+
+# Order samples ----------------------------------------------------------------
+column_order <- with(annotation_col, order(Genotype, Timepoint))
+RM_vst_counts_z_sub_ordered <- RM_vst_counts_z_sub[, column_order]
+annotation_col_ordered <- annotation_col[column_order, , drop = FALSE]
+
+# Calculate gaps ---------------------------------------------------------------
+genotype_table <- table(annotation_col_ordered$Genotype)
+gaps_col <- cumsum(genotype_table)[-length(genotype_table)]
+
+# Create heatmap title ---------------------------------------------------------
+n_genes <- nrow(RM_vst_counts_z_sub_ordered)
+plot_title <- paste0("Top 500 Variable Genes: T21 vs D21 Across Timepoints (n=", n_genes, ")")
+
+# Create the heatmap -----------------------------------------------------------
+p_heatmap <- pheatmap(
+  RM_vst_counts_z_sub_ordered,
+  color = viridis(100),
+  cluster_rows = TRUE,
+  cluster_cols = FALSE,
+  clustering_method = "complete",
+  cutree_rows = 4,
+  annotation_col = annotation_col_ordered,
+  annotation_row = annotation_row,
+  annotation_colors = ann_colors,
+  gaps_col = gaps_col,
+  show_rownames = FALSE,
+  show_colnames = FALSE,
+  fontsize = 10,
+  fontfamily = "Helvetica Neue",
+  border_color = NA,
+  main = plot_title,
+  annotation_legend = TRUE,
+  legend = TRUE,
+  treeheight_row = 20,
+  treeheight_col = 0
+)
+
+print(p_heatmap)
+
+
+# Create line plots for clusters ----------------------------------------------
+# Function to calculate cluster statistics
+calculate_cluster_stats <- function(cluster_num, cluster_genes, vst_data, metadata) {
+  genes_in_cluster <- cluster_genes[[cluster_num]]
+  vst_subset <- vst_data[rownames(vst_data) %in% genes_in_cluster, ]
+  
+  vst_zscore <- t(scale(t(vst_subset)))
+  mean_zscore_per_sample <- colMeans(vst_zscore, na.rm = TRUE)
+  
+  plot_data <- data.frame(
+    Sample = colnames(vst_subset),
+    Mean_Zscore = mean_zscore_per_sample,
+    stringsAsFactors = FALSE
+  )
+  
+  plot_data <- merge(plot_data, metadata, by.x = "Sample", by.y = "row.names")
+  
+  summary_stats <- plot_data %>%
+    dplyr::group_by(timepoint, genotype) %>%
+    dplyr::summarise(
+      Mean = mean(Mean_Zscore, na.rm = TRUE),
+      SE = sd(Mean_Zscore, na.rm = TRUE) / sqrt(n()),
+      N = n(),
+      .groups = 'drop'
+    ) %>%
+    dplyr::mutate(
+      Cluster = paste("Cluster", cluster_num),
+      timepoint = as.numeric(as.character(timepoint))
+    )
+  
+  return(summary_stats)
+}
+
+# Prepare cluster data
+n_clusters <- 4
+cluster_genes_RM <- split(names(clusters), clusters)
+
+# Calculate stats for all clusters
+all_cluster_stats_RM <- do.call(rbind, lapply(1:n_clusters, function(i) {
+  calculate_cluster_stats(i, cluster_genes_RM, rm_vst_counts, rm_metadata)
+}))
+
+# Create plots for each cluster
+plot_list_RM <- list()
+
+for(i in 1:n_clusters) {
+  cluster_data <- all_cluster_stats_RM %>% 
+    dplyr::filter(Cluster == paste("Cluster", i))
+  
+  n_genes <- length(cluster_genes_RM[[i]])
+  
+  p <- ggplot(cluster_data, aes(x = timepoint, y = Mean, color = genotype, group = genotype)) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "gray60", linewidth = 0.3) +
+    geom_ribbon(aes(ymin = Mean - SE, ymax = Mean + SE, fill = genotype), 
+                alpha = 0.2, color = NA) +
+    geom_line(linewidth = 1) +
+    geom_point(size = 2.5) +
+    scale_color_manual(values = c("D21" = "royalblue3", "T21" = "red3")) +
+    scale_fill_manual(values = c("D21" = "royalblue3", "T21" = "red3")) +
+    scale_x_continuous(
+      breaks = c(4, 7, 10, 15),
+      labels = c("D4", "D7", "D10", "D15")
+    ) +
+    labs(
+      title = paste0("M", i, " (n=", n_genes, " genes)"),
+      x = "Timepoint",
+      y = expression(bar(z)~"-score"),
+      color = "Genotype",
+      fill = "Genotype"
+    ) +
+    theme_bw() +
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 11, face = "bold", 
+                                family = "Helvetica Neue"),
+      axis.title = element_text(size = 10, family = "Helvetica Neue"),
+      axis.text = element_text(size = 9, family = "Helvetica Neue"),
+      legend.title = element_text(size = 10, family = "Helvetica Neue"),
+      legend.text = element_text(size = 9, family = "Helvetica Neue"),
+      panel.grid.minor = element_blank(),
+      text = element_text(family = "Helvetica Neue")
+    )
+  
+  plot_list_RM[[i]] <- p
+}
+
+# Combine plots
+combined_plot_RM <- wrap_plots(plot_list_RM, ncol = 2, nrow = 2) +
+  plot_layout(guides = 'collect') &
+  theme(legend.position = 'right')
+
+print(combined_plot_RM)
+
+# Save line plots
+ggsave("top500_variable_genes_lineplots.svg", 
+       plot = combined_plot_RM, 
+       width = 10, 
+       height = 8, 
+       dpi = 300)
+
+# Print summary statistics -----------------------------------------------------
+for(i in 1:n_clusters) {
+  cat(paste("\nCluster M", i, " contains ", length(cluster_genes_RM[[i]]), " genes\n", sep = ""))
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```

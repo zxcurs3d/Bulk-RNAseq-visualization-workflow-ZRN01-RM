@@ -1,0 +1,421 @@
+---
+title: "3-downstream-viz"
+output: html_document
+date: "2025-09-02"
+---
+
+```{r}
+
+
+# Load required libraries ------------------------------------------------------
+library(pheatmap)
+library(RColorBrewer)
+library(dplyr)
+library(ggplot2)
+library(dplyr)
+library(patchwork)
+library(matrixStats)
+
+
+# Prepare data -----------------------------------------------------------------
+# Z-score transform function
+z_score_row <- function(x) {
+  t(apply(x, 1, function(row) (row - mean(row, na.rm = TRUE)) / sd(row, na.rm = TRUE)))
+}
+
+# Apply z-score transformation
+RM_vst_counts_z <- z_score_row(rm_vst_counts)
+RM_vst_counts_z_sub <- RM_vst_counts_z[rownames(RM_vst_counts_z) %in% smooth_muscle_cell_differentiation_go_compiled, ]
+
+# Rename columns for clarity
+colnames(RM_vst_counts_z_sub) <- rm_metadata$group_id_new
+
+# Hierarchical clustering and cluster assignment -------------------------------
+hc <- hclust(dist(RM_vst_counts_z_sub))
+clusters <- cutree(hc, k = 2)
+
+# Create annotations -----------------------------------------------------------
+# Column annotations
+annotation_col <- data.frame(
+  Genotype = factor(rm_metadata$genotype, levels = c("D21", "T21")),
+  Timepoint = factor(rm_metadata$timepoint, levels = c("4", "7", "10", "15")),
+  row.names = rm_metadata$group_id_new
+)
+
+# Row annotations
+annotation_row <- data.frame(
+  Cluster = factor(paste0("M", clusters), levels = c("M1", "M2")),
+  row.names = names(clusters)
+)
+
+# Define color schemes ---------------------------------------------------------
+# Annotation colors
+ann_colors <- list(
+  Genotype = c(D21 = "royalblue3", T21 = "red3"),
+  Timepoint = c("4" = "#e12729", "7" = "#f37324", "10" = "#f8cc1b", "15" = "#72b043"),
+  Cluster = c(M1 = "#E41A1C", M2 = "#377EB8")
+)
+
+# Heatmap color palette
+color_palette <- colorRampPalette(c("#053061", "#2166AC", "#4393C3", "#92C5DE", 
+                                    "#D1E5F0", "#FDDBC7", "#F4A582", "#D6604D", 
+                                    "#B2182B", "#67001F"))(100)
+
+# Order samples ----------------------------------------------------------------
+# Order by genotype first (D21, then T21), then by timepoint within each
+column_order <- with(annotation_col, order(Genotype, Timepoint))
+RM_vst_counts_z_sub_ordered <- RM_vst_counts_z_sub[, column_order]
+annotation_col_ordered <- annotation_col[column_order, , drop = FALSE]
+
+# Calculate gaps for visual separation ----------------------------------------
+# Find where genotype changes for column gaps
+genotype_table <- table(annotation_col_ordered$Genotype)
+gaps_col <- cumsum(genotype_table)[-length(genotype_table)]
+
+# For row gaps with clustering, we need to use cutree_rows parameter
+# or let pheatmap handle it with the annotation
+
+# Gene labeling ----------------------------------------------------------------
+labels_row <- rownames(RM_vst_counts_z_sub_ordered)
+
+# Calculate number of genes for dynamic title
+n_genes <- nrow(RM_vst_counts_z_sub_ordered)
+plot_title <- paste0("Smooth Muscle Differentiation: T21 vs D21 Across Timepoints (n=", n_genes, ")")
+
+# Create the pheatmap ----------------------------------------------------------
+p <- pheatmap(
+  RM_vst_counts_z_sub_ordered,
+  color = viridis(100),
+  cluster_rows = TRUE,
+  cluster_cols = FALSE,
+  clustering_method = "complete",
+  cutree_rows = 2,  # This creates gaps between 2 clusters
+  annotation_col = annotation_col_ordered,
+  annotation_row = annotation_row,
+  annotation_colors = ann_colors,
+  gaps_col = gaps_col,
+  show_rownames = TRUE,
+  show_colnames = FALSE,
+  labels_row = labels_row,
+  fontsize = 10,
+  fontsize_row = 8,
+  fontsize_col = 8,
+  fontfamily = "Helvetica Neue",
+  border_color = NA,
+  main = plot_title,
+  annotation_legend = TRUE,
+  legend = TRUE,
+  treeheight_row = 15,
+  treeheight_col = 0
+)
+print(p)
+
+# Load required libraries ------------------------------------------------------
+
+# Function to calculate cluster statistics -------------------------------------
+calculate_cluster_stats <- function(cluster_num, cluster_genes, vst_data, metadata) {
+  genes_in_cluster <- cluster_genes[[cluster_num]]
+  vst_subset <- vst_data[rownames(vst_data) %in% genes_in_cluster, ]
+  
+  # Z-score transform
+  vst_zscore <- t(scale(t(vst_subset)))
+  
+  # Calculate mean z-score per sample
+  mean_zscore_per_sample <- colMeans(vst_zscore, na.rm = TRUE)
+  
+  plot_data <- data.frame(
+    Sample = colnames(vst_subset),
+    Mean_Zscore = mean_zscore_per_sample,
+    stringsAsFactors = FALSE
+  )
+  
+  plot_data <- merge(plot_data, metadata, by.x = "Sample", by.y = "row.names")
+  
+  summary_stats <- plot_data %>%
+    dplyr::group_by(timepoint, genotype) %>%
+    dplyr::summarise(
+      Mean = mean(Mean_Zscore, na.rm = TRUE),
+      SE = sd(Mean_Zscore, na.rm = TRUE) / sqrt(n()),
+      N = n(),
+      .groups = 'drop'
+    ) %>%
+    dplyr::mutate(
+      Cluster = paste("Cluster", cluster_num),
+      timepoint = as.numeric(as.character(timepoint))
+    )
+  
+  return(summary_stats)
+}
+
+# Prepare cluster data ---------------------------------------------------------
+n_clusters <- 2
+cluster_genes_RM <- split(names(clusters), clusters)
+
+# Calculate stats for all clusters
+all_cluster_stats_RM <- do.call(rbind, lapply(1:n_clusters, function(i) {
+  calculate_cluster_stats(i, cluster_genes_RM, rm_vst_counts, rm_metadata)
+}))
+
+# Create plots for each cluster -----------------------------------------------
+plot_list_RM <- list()
+
+for(i in 1:n_clusters) {
+  cluster_data <- all_cluster_stats_RM %>% 
+    dplyr::filter(Cluster == paste("Cluster", i))
+  
+  n_genes <- length(cluster_genes_RM[[i]])
+  
+  p <- ggplot(cluster_data, aes(x = timepoint, y = Mean, color = genotype, group = genotype)) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "gray60", linewidth = 0.3) +
+    geom_ribbon(aes(ymin = Mean - SE, ymax = Mean + SE, fill = genotype), 
+                alpha = 0.2, color = NA) +
+    geom_line(linewidth = 1) +
+    geom_point(size = 2.5) +
+    scale_color_manual(values = c("D21" = "royalblue3", "T21" = "red3")) +
+    scale_fill_manual(values = c("D21" = "royalblue3", "T21" = "red3")) +
+    scale_x_continuous(
+      breaks = c(4, 7, 10, 15),
+      labels = c("D4", "D7", "D10", "D15")
+    ) +
+    labs(
+      title = paste0("M", i, " (n=", n_genes, " genes)"),
+      x = "Timepoint",
+      y = expression(bar(z)~"-score"),
+      color = "Genotype",
+      fill = "Genotype"
+    ) +
+    theme_bw() +
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 12, face = "bold", 
+                                family = "Helvetica Neue"),
+      axis.title = element_text(size = 11, family = "Helvetica Neue"),
+      axis.text = element_text(size = 10, family = "Helvetica Neue"),
+      legend.title = element_text(size = 11, family = "Helvetica Neue"),
+      legend.text = element_text(size = 10, family = "Helvetica Neue"),
+      panel.grid.minor = element_blank(),
+      text = element_text(family = "Helvetica Neue")
+    )
+  
+  plot_list_RM[[i]] <- p
+}
+
+# Combine plots ----------------------------------------------------------------
+combined_plot_RM <- wrap_plots(plot_list_RM, ncol = 1, nrow = 2) +
+  plot_layout(guides = 'collect') &
+  theme(legend.position = 'right')
+
+print(combined_plot_RM)
+
+# Save combined plot -----------------------------------------------------------
+ggsave("rm_cluster_lineplots.svg", 
+       plot = combined_plot_RM, 
+       width = 8, 
+       height = 8, 
+       dpi = 300)
+
+
+
+
+# heatmap of top variable genes
+
+# Load required libraries ------------------------------------------------------
+library(pheatmap)
+library(RColorBrewer)
+library(dplyr)
+library(ggplot2)
+library(patchwork)
+library(matrixStats)
+library(viridis)
+
+# Identify top 500 variable genes ---------------------------------------------
+# Calculate row variances across all samples
+gene_variances <- rowVars(as.matrix(rm_vst_counts))
+names(gene_variances) <- rownames(rm_vst_counts)
+
+# Get top 500 most variable genes
+top500_variable_genes <- names(sort(gene_variances, decreasing = TRUE)[1:500])
+
+# Prepare data for heatmap ----------------------------------------------------
+z_score_row <- function(x) {
+  t(apply(x, 1, function(row) (row - mean(row, na.rm = TRUE)) / sd(row, na.rm = TRUE)))
+}
+
+# Apply z-score transformation to top 500 genes
+RM_vst_counts_z <- z_score_row(rm_vst_counts)
+RM_vst_counts_z_sub <- RM_vst_counts_z[top500_variable_genes, ]
+
+# Rename columns
+colnames(RM_vst_counts_z_sub) <- rm_metadata$group_id_new
+
+# Hierarchical clustering ------------------------------------------------------
+hc <- hclust(dist(RM_vst_counts_z_sub))
+clusters <- cutree(hc, k = 4)  # Using 4 clusters for 500 genes
+
+# Create annotations -----------------------------------------------------------
+annotation_col <- data.frame(
+  Genotype = factor(rm_metadata$genotype, levels = c("D21", "T21")),
+  Timepoint = factor(rm_metadata$timepoint, levels = c("4", "7", "10", "15")),
+  row.names = rm_metadata$group_id_new
+)
+
+annotation_row <- data.frame(
+  Cluster = factor(paste0("M", clusters), levels = paste0("M", 1:4)),
+  row.names = names(clusters)
+)
+
+# Define color schemes ---------------------------------------------------------
+ann_colors <- list(
+  Genotype = c(D21 = "royalblue3", T21 = "red3"),
+  Timepoint = c("4" = "#e12729", "7" = "#f37324", "10" = "#f8cc1b", "15" = "#72b043"),
+  Cluster = c(M1 = "#E41A1C", M2 = "#377EB8", M3 = "#4DAF4A", M4 = "#984EA3")
+)
+
+color_palette <- colorRampPalette(c("#053061", "#2166AC", "#4393C3", "#92C5DE", 
+                                    "#D1E5F0", "#FDDBC7", "#F4A582", "#D6604D", 
+                                    "#B2182B", "#67001F"))(100)
+
+# Order samples ----------------------------------------------------------------
+column_order <- with(annotation_col, order(Genotype, Timepoint))
+RM_vst_counts_z_sub_ordered <- RM_vst_counts_z_sub[, column_order]
+annotation_col_ordered <- annotation_col[column_order, , drop = FALSE]
+
+# Calculate gaps ---------------------------------------------------------------
+genotype_table <- table(annotation_col_ordered$Genotype)
+gaps_col <- cumsum(genotype_table)[-length(genotype_table)]
+
+# Create heatmap title ---------------------------------------------------------
+n_genes <- nrow(RM_vst_counts_z_sub_ordered)
+plot_title <- paste0("Top 500 Variable Genes: T21 vs D21 Across Timepoints (n=", n_genes, ")")
+
+# Create the heatmap -----------------------------------------------------------
+p_heatmap <- pheatmap(
+  RM_vst_counts_z_sub_ordered,
+  color = viridis(100),
+  cluster_rows = TRUE,
+  cluster_cols = FALSE,
+  clustering_method = "complete",
+  cutree_rows = 4,
+  annotation_col = annotation_col_ordered,
+  annotation_row = annotation_row,
+  annotation_colors = ann_colors,
+  gaps_col = gaps_col,
+  show_rownames = FALSE,
+  show_colnames = FALSE,
+  fontsize = 10,
+  fontfamily = "Helvetica Neue",
+  border_color = NA,
+  main = plot_title,
+  annotation_legend = TRUE,
+  legend = TRUE,
+  treeheight_row = 20,
+  treeheight_col = 0
+)
+
+print(p_heatmap)
+
+
+# Create line plots for clusters ----------------------------------------------
+# Function to calculate cluster statistics
+calculate_cluster_stats <- function(cluster_num, cluster_genes, vst_data, metadata) {
+  genes_in_cluster <- cluster_genes[[cluster_num]]
+  vst_subset <- vst_data[rownames(vst_data) %in% genes_in_cluster, ]
+  
+  vst_zscore <- t(scale(t(vst_subset)))
+  mean_zscore_per_sample <- colMeans(vst_zscore, na.rm = TRUE)
+  
+  plot_data <- data.frame(
+    Sample = colnames(vst_subset),
+    Mean_Zscore = mean_zscore_per_sample,
+    stringsAsFactors = FALSE
+  )
+  
+  plot_data <- merge(plot_data, metadata, by.x = "Sample", by.y = "row.names")
+  
+  summary_stats <- plot_data %>%
+    dplyr::group_by(timepoint, genotype) %>%
+    dplyr::summarise(
+      Mean = mean(Mean_Zscore, na.rm = TRUE),
+      SE = sd(Mean_Zscore, na.rm = TRUE) / sqrt(n()),
+      N = n(),
+      .groups = 'drop'
+    ) %>%
+    dplyr::mutate(
+      Cluster = paste("Cluster", cluster_num),
+      timepoint = as.numeric(as.character(timepoint))
+    )
+  
+  return(summary_stats)
+}
+
+# Prepare cluster data
+n_clusters <- 4
+cluster_genes_RM <- split(names(clusters), clusters)
+
+# Calculate stats for all clusters
+all_cluster_stats_RM <- do.call(rbind, lapply(1:n_clusters, function(i) {
+  calculate_cluster_stats(i, cluster_genes_RM, rm_vst_counts, rm_metadata)
+}))
+
+# Create plots for each cluster
+plot_list_RM <- list()
+
+for(i in 1:n_clusters) {
+  cluster_data <- all_cluster_stats_RM %>% 
+    dplyr::filter(Cluster == paste("Cluster", i))
+  
+  n_genes <- length(cluster_genes_RM[[i]])
+  
+  p <- ggplot(cluster_data, aes(x = timepoint, y = Mean, color = genotype, group = genotype)) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "gray60", linewidth = 0.3) +
+    geom_ribbon(aes(ymin = Mean - SE, ymax = Mean + SE, fill = genotype), 
+                alpha = 0.2, color = NA) +
+    geom_line(linewidth = 1) +
+    geom_point(size = 2.5) +
+    scale_color_manual(values = c("D21" = "royalblue3", "T21" = "red3")) +
+    scale_fill_manual(values = c("D21" = "royalblue3", "T21" = "red3")) +
+    scale_x_continuous(
+      breaks = c(4, 7, 10, 15),
+      labels = c("D4", "D7", "D10", "D15")
+    ) +
+    labs(
+      title = paste0("M", i, " (n=", n_genes, " genes)"),
+      x = "Timepoint",
+      y = expression(bar(z)~"-score"),
+      color = "Genotype",
+      fill = "Genotype"
+    ) +
+    theme_bw() +
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 11, face = "bold", 
+                                family = "Helvetica Neue"),
+      axis.title = element_text(size = 10, family = "Helvetica Neue"),
+      axis.text = element_text(size = 9, family = "Helvetica Neue"),
+      legend.title = element_text(size = 10, family = "Helvetica Neue"),
+      legend.text = element_text(size = 9, family = "Helvetica Neue"),
+      panel.grid.minor = element_blank(),
+      text = element_text(family = "Helvetica Neue")
+    )
+  
+  plot_list_RM[[i]] <- p
+}
+
+# Combine plots
+combined_plot_RM <- wrap_plots(plot_list_RM, ncol = 2, nrow = 2) +
+  plot_layout(guides = 'collect') &
+  theme(legend.position = 'right')
+
+print(combined_plot_RM)
+
+# Save line plots
+ggsave("top500_variable_genes_lineplots.svg", 
+       plot = combined_plot_RM, 
+       width = 10, 
+       height = 8, 
+       dpi = 300)
+
+# Print summary statistics -----------------------------------------------------
+for(i in 1:n_clusters) {
+  cat(paste("\nCluster M", i, " contains ", length(cluster_genes_RM[[i]]), " genes\n", sep = ""))
+}
+
+```
