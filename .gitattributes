@@ -1,0 +1,9 @@
+# Count R and Rmd files toward language stats
+*.R linguist-detectable=true
+*.Rmd linguist-detectable=true
+
+# Ignore non-source files
+*.svg linguist-vendored
+*.html linguist-vendored
+*.png linguist-vendored
+*.pdf linguist-vendored
