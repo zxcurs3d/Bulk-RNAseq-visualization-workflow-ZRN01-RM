@@ -26,8 +26,6 @@ Part 2 performs differential gene expression testing with DESeq2 across the expe
 All code is written in R and organized into two R Markdown notebooks (one for QC, one for DGE and downstream analysis), with knitted HTML reports and all figures included in the repository. Supporting functions are organized into an <code>R/</code> folder for reuse across analyses. This structure makes it straightforward to extend the workflow to additional datasets while maintaining clarity and reproducibility.
 </p>
 
-## Repository structure
-
 <!-- =========================
      Repository structure
      ========================= -->
