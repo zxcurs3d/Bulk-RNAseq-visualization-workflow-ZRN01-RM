@@ -6,6 +6,10 @@ Date: 09/01/2024
 
 For any inquiries or suggestions to the below pipeline, my email is: hshim1@uchicago.edu
 
+## About this repository
+
+## Repository structure
+
 ## Table of Contents
 - [Data & Inputs](#data--inputs)
 - [Part 1: Quality control and sample assessment](#part-1-quality-control-and-sample-assessment)
@@ -80,13 +84,13 @@ For any inquiries or suggestions to the below pipeline, my email is: hshim1@uchi
 
 This section of the workflow is primarily focused on assessing the quality of samples and to identify potential outlier samples. Although multiQC or other RNAseq QC pipelines will likely identify problematic samples upstream of generation of raw counts, sample clustering can also provide biologically insightful results.
 
- [1a. CPM distribution filtering](#1a-cpm-distribution-filtering)
-- [1b. Distribution of p-values across DESeq2 contrasts of interest](#1b-distribution-of-p-values-across-deseq2-contrasts-of-interest)
-- [1c. log2FoldChange scatterplots to compare shrinkage vs. no shrinkage](#1c-log2foldchange-scatterplots-to-compare-effect-of-deseq2s-apeglm-shrinkage-vs-no-shrinkage)
-- [1c. DESeq2 normalization assessment](#1c-deseq2-normalization-assessment)
-- [1d. Sample-to-sample correlation matrix heatmap](#1d-sample-to-sample-correlation-matrix-heatmap)
-- [1e. PCA plot (± loadings + Scree)](#1e-pca-plot-with-and-withlout-loadings--scree-plot)
-- [1f. Lineplot of gene subtypes across all samples](#1f-lineplot-of-gene-subtypes-across-all-samples)
+[1a. CPM distribution filtering](#1a-cpm-distribution-filtering)
+[1b. Distribution of p-values across DESeq2 contrasts of interest](#1b-distribution-of-p-values-across-deseq2-contrasts-of-interest)
+[1c. log2FoldChange scatterplots to compare shrinkage vs. no shrinkage](#1c-log2foldchange-scatterplots-to-compare-effect-of-deseq2s-apeglm-shrinkage-vs-no-shrinkage)
+[1c. DESeq2 normalization assessment](#1c-deseq2-normalization-assessment)
+[1d. Sample-to-sample correlation matrix heatmap](#1d-sample-to-sample-correlation-matrix-heatmap)
+[1e. PCA plot (± loadings + Scree)](#1e-pca-plot-with-and-withlout-loadings--scree-plot)
+[1f. Lineplot of gene subtypes across all samples](#1f-lineplot-of-gene-subtypes-across-all-samples)
 
 ## 1a. CPM distribution filtering
 
