@@ -145,7 +145,8 @@ DESeq2 offers a wi
   <img src="1-figures/quality_control/scree_plot.svg" alt="Scree plot" width="30%"/>
 </p>
 
-## 1f. Gene subtype lineplot across
+## 1f. Gene subclass lineplot across
 
 ![Gene biotype lineplot](1-figures/quality_control/gene_biotype_lineplot.svg)
 
+For QC purposes, this plot is likely superfluous/unnecessary. Regardless, samples with technical/sequencing issues will show an altered number of counts for a particular gene subtype. 
