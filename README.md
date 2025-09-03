@@ -78,6 +78,8 @@ For any inquiries or suggestions to the below pipeline, my email is: hshim1@uchi
 
 # Part 1: Quality control and sample clustering
 
+This section of the workflow is primarily focused on assessing the quality of samples and to identify potential outlier samples. Although multiQC or other RNAseq QC pipelines will likely identify problematic samples upstream of generation of raw counts, sample clustering can also provide biologically insightful results.
+
  [1a. CPM distribution filtering](#1a-cpm-distribution-filtering)
 - [1b. Distribution of p-values across DESeq2 contrasts of interest](#1b-distribution-of-p-values-across-deseq2-contrasts-of-interest)
 - [1c. log2FoldChange scatterplots to compare shrinkage vs. no shrinkage](#1c-log2foldchange-scatterplots-to-compare-effect-of-deseq2s-apeglm-shrinkage-vs-no-shrinkage)
@@ -108,11 +110,18 @@ n_expressed <- sum(expressed_genes)
 
 ![Library size boxplot](1-figures/quality_control/lib_size_boxplot.svg)
 
+All samples appear to share similar library sizes, so there are 
+
 ## 1b. Distribution of p-values across DESeq2 contrasts of interest
 
 ![p-value distributions](1-figures/quality_control/pvalue_distributions.svg)
 
+Interestingly, in the case of this experiment, our condition of interest (genotype) appears to induce a large transcriptional pertubation. ~9000 genes pass our pvalue filter of 0.05. This result is not necessarily problematic since we will apply a log2FoldChange cutoff, which should reduce potential FPs. 
+
 ## 1c. log2FoldChange scatterplots to compare effect of DESeq2's apeglm shrinkage vs. no shrinkage
+
+
+DESeq2 offers a wi
 
 ## 1c. DESeq2 normalization assessment
 
