@@ -1,8 +1,7 @@
 # Bulk RNA-seq Time-Course Analysis: ZRN01 Dataset #1 (RM)
 
-Analysis and pipeline by: Ha-Na Shim 
-
-For any inquiries or suggestions to the below pipeline, my email is: hshim1@uchicago.edu
+<p><strong>Analysis and pipeline prepared by:</strong> Ha-Na Shim</p>
+<p><strong>Contact:</strong> hshim1@uchicago.edu for questions, feedback, or suggestions regarding this workflow.</p>
 
 ## Tools/packages used
 
