@@ -78,6 +78,8 @@ For any inquiries or suggestions to the below pipeline, my email is: hshim1@uchi
 
 # Part 1: Quality control and sample clustering
 
+This section of the workflow is primarily focused on assessing the quality of samples and to identify potential outlier samples. Although multiQC or other RNAseq QC pipelines will likely identify problematic samples upstream of generation of raw counts, sample clustering can also provide biologically insightful results.
+
  [1a. CPM distribution filtering](#1a-cpm-distribution-filtering)
 - [1b. Distribution of p-values across DESeq2 contrasts of interest](#1b-distribution-of-p-values-across-deseq2-contrasts-of-interest)
 - [1c. log2FoldChange scatterplots to compare shrinkage vs. no shrinkage](#1c-log2foldchange-scatterplots-to-compare-effect-of-deseq2s-apeglm-shrinkage-vs-no-shrinkage)
@@ -93,9 +95,33 @@ For any inquiries or suggestions to the below pipeline, my email is: hshim1@uchi
   <img src="1-figures/quality_control/qc_f3_f4_comb.svg" alt="CPM distribution F3–F4" width="48%"/>
 </p>
 
+<h3>Parameters used for CPM filtering</h3>
+<p>
+  <strong>Criteria:</strong> &gt;3 CPM in at least 3 replicates
+</p>
+
+<pre><code class="language-r">
+total_genes <- nrow(cpm_matrix)
+expressed_genes <- rowSums(cpm_matrix > 3) >= 3
+n_expressed <- sum(expressed_genes)
+</code></pre>
+
+## 1b. Library size comparison across all samples
+
+![Library size boxplot](1-figures/quality_control/lib_size_boxplot.svg)
+
+All samples appear to share similar library sizes, so there are 
+
 ## 1b. Distribution of p-values across DESeq2 contrasts of interest
 
+![p-value distributions](1-figures/quality_control/pvalue_distributions.svg)
+
+Interestingly, in the case of this experiment, our condition of interest (genotype) appears to induce a large transcriptional pertubation. ~9000 genes pass our pvalue filter of 0.05. This result is not necessarily problematic since we will apply a log2FoldChange cutoff, which should reduce potential FPs. 
+
 ## 1c. log2FoldChange scatterplots to compare effect of DESeq2's apeglm shrinkage vs. no shrinkage
+
+
+DESeq2 offers a wi
 
 ## 1c. DESeq2 normalization assessment
 
@@ -119,4 +145,20 @@ For any inquiries or suggestions to the below pipeline, my email is: hshim1@uchi
   <img src="1-figures/quality_control/scree_plot.svg" alt="Scree plot" width="30%"/>
 </p>
 
-## 1f. Gene subtype lineplot across
+## 1f. Gene subclass lineplot across
+
+![Gene biotype lineplot](1-figures/quality_control/gene_biotype_lineplot.svg)
+
+For QC purposes, this plot is likely superfluous/unnecessary. Regardless, samples with technical/sequencing issues will show an altered number of counts for a particular gene subtype. 
+
+
+
+# Part 2: Differential gene expression analysis
+
+## Histogram of upregulated and downregulated DEG counts for each timepoint
+
+## 2a. Volcano plots of differentially expressed genes
+
+## Gene ontology (GO) enrichment analysis of upregulated and downregulated differentially expressed genes
+
+## edgeR Counts per million (CPM) boxpltos of genes of interest over course of differentiation
