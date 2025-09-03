@@ -1,25 +1,7 @@
-# Bulk RNA-seq Time-Course Workflow (QC, DGE, Functional Analysis): ZRN01 Example #1 Analysis Workflow (RM)
+# Bulk RNA-seq Time-Course Analysis: ZRN01 Dataset #1 (RM)
 
-Analysis and pipeline by: Ha-Na Shim 
-
-Date: 09/01/2024
-
-For any inquiries or suggestions to the below pipeline, my email is: hshim1@uchicago.edu
-
-## About this repository
-
-## Repository structure
-
-## Table of Contents
-- [Data & Inputs](#data--inputs)
-- [Part 1: Quality control and sample assessment](#part-1-quality-control-and-sample-assessment)
-  - [CPM distribution filtering](#cpm-distribution-filtering)
-  - [Distribution of counts](#distribution-of-counts)
-  - [DESeq2 normalization assessment](#deseq2-normalization-assessment)
-  - [Sample-to-sample correlation & dendrogram](#sample-to-sample-correlation--dendrogram)
-  - [PCA (± loadings) & Scree](#pca--loadings--scree)
-- [Downstream DGE & Functional Analysis (stubs)](#downstream-dge--functional-analysis-stubs)
-- [Reproducibility](#reproducibility)
+<p><strong>Analysis and pipeline prepared by:</strong> Ha-Na Shim</p>
+<p><strong>Contact:</strong> hshim1@uchicago.edu for questions, feedback, or suggestions regarding this workflow.</p>
 
 ## Tools/packages used
 
@@ -28,7 +10,6 @@ For any inquiries or suggestions to the below pipeline, my email is: hshim1@uchi
 
 <p align="center">
 
-<!-- Bioconductor hexes you provided -->
 <a href="https://bioconductor.org/packages/DESeq2">
   <img src="https://raw.githubusercontent.com/Bioconductor/BiocStickers/master/DESeq2/DESeq2.png" height="125" alt="DESeq2 hex">
 </a>
@@ -79,6 +60,139 @@ For any inquiries or suggestions to the below pipeline, my email is: hshim1@uchi
 [Kallisto-url]: https://pachterlab.github.io/kallisto/
 [MultiQC-url]: https://multiqc.info/
 
+## Table of Contents
+- [Data & Inputs](#data--inputs)
+- [Part 1: Quality control and sample assessment](#part-1-quality-control-and-sample-assessment)
+  - [CPM distribution filtering](#cpm-distribution-filtering)
+  - [Distribution of counts](#distribution-of-counts)
+  - [DESeq2 normalization assessment](#deseq2-normalization-assessment)
+  - [Sample-to-sample correlation & dendrogram](#sample-to-sample-correlation--dendrogram)
+  - [PCA (± loadings) & Scree](#pca--loadings--scree)
+- [Downstream DGE & Functional Analysis (stubs)](#downstream-dge--functional-analysis-stubs)
+- [Reproducibility](#reproducibility)
+
+### Required packages and R version
+
+<p><em>The following packages are required to run the workflow and generate the visualizations below.</em></p>
+
+**R ≥ 4.5.1** (released 2025-06-13). 
+**Bioconductor ≥ 3.21** (works with R 4.5.x)
+
+  ```sh
+#CRAN
+install.packages(c(
+  "tidyverse",   # includes dplyr, ggplot2, stringr, etc.
+  "patchwork", "ggrepel", "cowplot", "gridExtra", "scales"
+))
+
+#Bioconductor
+if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
+BiocManager::install(c("DESeq2", "edgeR", "clusterProfiler", "AnnotationDbi", "org.Hs.eg.db"))  
+```
+
+<h2 id="about-this-repository">About this repository</h2>
+
+<p>
+This repository documents an applied bulk RNA-seq analysis workflow that I carried out on an unpublished dataset provided by a collaborator. The focus here is on the downstream analysis starting from processed count data. Raw sequencing data (FASTQ files), sample metadata, and other identifying information are intentionally excluded in order to protect unpublished work and maintain confidentiality.
+</p>
+
+<p>
+The goal of this repository is to provide a clear example of how bulk RNA-seq data generated in the lab can be taken through quality control, differential gene expression analysis, and downstream functional interpretation using a structured and reproducible workflow. While the dataset itself is specific to a collaborator’s study, the workflow is generalizable and can be applied to new datasets generated in the lab with minimal adaptation.
+</p>
+
+<p>
+Part 1 of the analysis focuses on quality control and exploratory data assessment. This includes CPM-based filtering, normalization checks, variance stabilizing transformations, correlation matrices, dendrograms, and principal component analysis with scree and loading plots. These steps help confirm that the input data are suitable for downstream analyses and that no major outliers are present.
+</p>
+
+<p>
+Part 2 performs differential gene expression testing with DESeq2 across the experimental contrasts of interest. Results are summarized with volcano plots, MA plots, and histograms of DEG counts. Functional interpretation is included through GO enrichment, Venn and UpSet diagrams of shared DEG sets, and aggregate time-course lineplots for groups of functionally related genes. Figures are exported in SVG format for high-quality, publication-ready visualization.
+</p>
+
+<p>
+All code is written in R and organized into two R Markdown notebooks (one for QC, one for DGE and downstream analysis), with knitted HTML reports and all figures included in the repository. Supporting functions are organized into an <code>R/</code> folder for reuse across analyses. This structure makes it straightforward to extend the workflow to additional datasets while maintaining clarity and reproducibility.
+</p>
+
+<!-- =========================
+     Repository structure
+     ========================= -->
+<h2 id="repository-structure">Repository structure</h2>
+
+<p>
+  This repository is organized for clarity and reproducibility. Source analyses live in
+  <code>0-rmarkdown/</code>, their knitted reports are in <code>0-knit-html/</code>,
+  reusable helpers live under <code>R/</code>, and exported figures are in
+  <code>1-figures/</code>. Raw data are intentionally <strong>not</strong> included (unpublished).
+</p>
+
+<!-- Quick tree view (abbreviated with ellipses) -->
+<details open>
+  <summary><strong>Quick tree view</strong></summary>
+  <pre>
+Bulk-RNAseq-visualization-workflow-ZRN01-RM/
+├─ README.md
+├─ .gitignore
+├─ <strong>0-rmarkdown/</strong>
+│  ├─ 1-preprocessing-and-quality-control.Rmd
+│  └─ 2-differential-gene-expression-figures.Rmd
+├─ <strong>0-knit-html/</strong>
+│  ├─ 1-preprocessing-and-quality-control.html
+│  └─ 2-differential-gene-expression-figures.html
+├─ <strong>R/</strong>
+│  └─ …                                 <!-- functions + combined script (not expanded here) -->
+└─ <strong>1-figures/</strong>
+   ├─ quality_control/
+   │  ├─ pca_plot_noloadings.svg
+   │  ├─ rle_combined_fig.svg
+   │  └─ … 
+   └─ differential_gene_expression/
+      ├─ volcano_combined_2x2_T21_vs_D21.svg
+      ├─ GO_enrichment_day7.svg
+      └─ …
+  </pre>
+</details>
+
+<!-- Folder-by-folder guide (concise) -->
+<details open>
+  <summary><strong>Folder-by-folder guide</strong></summary>
+
+  <h4><code>0-rmarkdown/</code> — analysis notebooks</h4>
+  <ul>
+    <li><code>1-preprocessing-and-quality-control.Rmd</code> — QC, clustering, PCA, normalization checks.</li>
+    <li><code>2-differential-gene-expression-figures.Rmd</code> — DESeq2 contrasts, volcano/MA, GO, UpSet/Venn, lineplots.</li>
+  </ul>
+
+  <h4><code>0-knit-html/</code> — knitted HTML reports</h4>
+  <ul>
+    <li>Human-readable exports of the Rmd notebooks for quick review.</li>
+  </ul>
+
+  <h4><code>R/</code> — function library</h4>
+  <ul>
+    <li>Reusable helpers supporting the analysis and figure generation.</li>
+  </ul>
+
+  <h4><code>1-figures/</code> — analysis outputs (SVG)</h4>
+  <ul>
+    <li><code>quality_control/</code> — PCA (± loadings), scree, RLE, dispersion, correlation/dendrogram, etc.</li>
+    <li><code>differential_gene_expression/</code> — Volcano &amp; MA plots, GO enrichment, UpSet/Venn, aggregate lineplots.</li>
+  </ul>
+
+  <h4>Not included</h4>
+  <ul>
+    <li><strong>Raw counts and metadata</strong> (dataset is unpublished).</li>
+  </ul>
+</details>
+
+<!-- How to navigate -->
+<details>
+  <summary><strong>How to navigate this project</strong></summary>
+  <ol>
+    <li>Skim the knitted reports in <code>0-knit-html/</code> for a quick overview.</li>
+    <li>Open the corresponding Rmd in <code>0-rmarkdown/</code> for code + narrative.</li>
+    <li>Import helpers from <code>R/</code> as needed.</li>
+    <li>Figures referenced below live in <code>1-figures/</code>.</li>
+  </ol>
+</details>
 
 # Part 1: Quality control and sample clustering
 
@@ -161,8 +275,86 @@ For QC purposes, this plot is likely superfluous/unnecessary. Regardless, sample
 
 ## Histogram of upregulated and downregulated DEG counts for each timepoint
 
+<p align="center">
+  <a href="1-figures/volcano/scatterplot/deg_histogram.svg">
+    <img src="1-figures/volcano/scatterplot/deg_histogram.svg" alt="DEG histogram" width="600">
+  </a>
+</p>
+
+
 ## 2a. Volcano plots of differentially expressed genes
+
+<p align="center">
+  <a href="1-figures/volcano/scatterplot/volcano_combined_2x2_T21_vs_D21.svg">
+    <img src="1-figures/volcano/scatterplot/volcano_combined_2x2_T21_vs_D21.svg" alt="Volcano combined 2x2 — T21 vs D21" width="600">
+  </a>
+</p>
+
+## 2aa. MA plots of differentially expressed genes
+
+<p align="center">
+  <a href="1-figures/differential_gene_expression/ma_plots_T21_vs_D21.svg">
+    <img src="1-figures/differential_gene_expression/ma_plots_T21_vs_D21.svg" alt="MA plots T21 vs D21" width="700">
+  </a>
+</p>
 
 ## Gene ontology (GO) enrichment analysis of upregulated and downregulated differentially expressed genes
 
+<p align="center">
+  <a href="1-figures/differential_gene_expression/GO_enrichment_day4.svg">
+    <img src="1-figures/differential_gene_expression/GO_enrichment_day4.svg" alt="GO enrichment — Day 4" width="600">
+  </a>
+</p>
+
+<p align="center">
+  <a href="1-figures/differential_gene_expression/GO_enrichment_day7.svg">
+    <img src="1-figures/differential_gene_expression/GO_enrichment_day7.svg" alt="GO enrichment — Day 7" width="600">
+  </a>
+</p>
+
+<p align="center">
+  <a href="1-figures/differential_gene_expression/GO_enrichment_day10.svg">
+    <img src="1-figures/differential_gene_expression/GO_enrichment_day10.svg" alt="GO enrichment — Day 10" width="600">
+  </a>
+</p>
+
+<p align="center">
+  <a href="1-figures/differential_gene_expression/GO_enrichment_day15.svg">
+    <img src="1-figures/differential_gene_expression/GO_enrichment_day15.svg" alt="GO enrichment — Day 15" width="600">
+  </a>
+</p>
+
 ## edgeR Counts per million (CPM) boxpltos of genes of interest over course of differentiation
+
+## Venn diagrams of upregulated + downregulated DEGs shared across all 4 timepoints
+
+<p align="center">
+  <a href="1-figures/differential_gene_expression/upset_upregulated.svg">
+    <img src="1-figures/differential_gene_expression/upset_upregulated.svg" alt="UpSet — Upregulated" width="400">
+  </a>
+  <a href="1-figures/differential_gene_expression/venn_upregulated.svg">
+    <img src="1-figures/differential_gene_expression/venn_upregulated.svg" alt="Venn — Upregulated" width="400">
+  </a>
+</p>
+
+<p align="center">
+  <a href="1-figures/differential_gene_expression/upset_downregulated.svg">
+    <img src="1-figures/differential_gene_expression/upset_downregulated.svg" alt="UpSet — Downregulated" width="400">
+  </a>
+  <a href="1-figures/differential_gene_expression/venn_downregulated.svg">
+    <img src="1-figures/differential_gene_expression/venn_downregulated.svg" alt="Venn — Downregulated" width="400">
+  </a>
+</p>
+
+## Aggregate gene expression lineplots to visualize change in GO term-associated gene expression over time
+
+<p align="center">
+  <a href="1-figures/differential_gene_expression/combined_lineplots_grid.svg">
+    <img src="1-figures/differential_gene_expression/combined_lineplots_grid.svg" alt="Combined lineplots grid" width="700">
+  </a>
+</p>
+
+## GSEA of custom GO lists
+
+
+## CPM boxplots for genes of interest
