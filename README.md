@@ -10,7 +10,6 @@
 
 <p align="center">
 
-<!-- Bioconductor hexes you provided -->
 <a href="https://bioconductor.org/packages/DESeq2">
   <img src="https://raw.githubusercontent.com/Bioconductor/BiocStickers/master/DESeq2/DESeq2.png" height="125" alt="DESeq2 hex">
 </a>
