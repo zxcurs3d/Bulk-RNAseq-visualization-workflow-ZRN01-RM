@@ -263,10 +263,21 @@ DESeq2 offers a wi
 
 ## 1e. PCA plot (with and withlout loadings + SCREE plot
 
+<!-- PCA plots side by side -->
 <p align="center">
-  <img src="1-figures/quality_control/pca_plot_noloadings.svg" alt="PCA plot without loadings" width="30%"/>
-  <img src="1-figures/quality_control/pca_plot_loadings.svg" alt="PCA plot with loadings" width="30%"/>
-  <img src="1-figures/quality_control/scree_plot.svg" alt="Scree plot" width="30%"/>
+  <a href="1-figures/quality_control/pca_plot_noloadings.svg">
+    <img src="1-figures/quality_control/pca_plot_noloadings.svg" alt="PCA plot without loadings" width="45%">
+  </a>
+  <a href="1-figures/quality_control/pca_plot_loadings.svg">
+    <img src="1-figures/quality_control/pca_plot_loadings.svg" alt="PCA plot with loadings" width="45%">
+  </a>
+</p>
+
+<!-- Scree plot on its own line -->
+<p align="center">
+  <a href="1-figures/quality_control/scree_plot.svg">
+    <img src="1-figures/quality_control/scree_plot.svg" alt="Scree plot" width="60%">
+  </a>
 </p>
 
 ## 1f. Gene subclass lineplot across
