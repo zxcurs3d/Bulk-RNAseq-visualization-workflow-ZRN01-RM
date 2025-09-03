@@ -6,6 +6,10 @@ Date: 09/01/2024
 
 For any inquiries or suggestions to the below pipeline, my email is: hshim1@uchicago.edu
 
+## About this repository
+
+## Repository structure
+
 ## Table of Contents
 - [Data & Inputs](#data--inputs)
 - [Part 1: Quality control and sample assessment](#part-1-quality-control-and-sample-assessment)
