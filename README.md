@@ -161,8 +161,81 @@ For QC purposes, this plot is likely superfluous/unnecessary. Regardless, sample
 
 ## Histogram of upregulated and downregulated DEG counts for each timepoint
 
+<p align="center">
+  <a href="1-figures/volcano/scatterplot/deg_histogram.svg">
+    <img src="1-figures/volcano/scatterplot/deg_histogram.svg" alt="DEG histogram" width="600">
+  </a>
+</p>
+
+
 ## 2a. Volcano plots of differentially expressed genes
+
+<p align="center">
+  <a href="1-figures/volcano/scatterplot/volcano_combined_2x2_T21_vs_D21.svg">
+    <img src="1-figures/volcano/scatterplot/volcano_combined_2x2_T21_vs_D21.svg" alt="Volcano combined 2x2 — T21 vs D21" width="600">
+  </a>
+</p>
+
+## 2aa. MA plots of differentially expressed genes
+
+<p align="center">
+  <a href="1-figures/differential_gene_expression/ma_plots_T21_vs_D21.svg">
+    <img src="1-figures/differential_gene_expression/ma_plots_T21_vs_D21.svg" alt="MA plots T21 vs D21" width="700">
+  </a>
+</p>
 
 ## Gene ontology (GO) enrichment analysis of upregulated and downregulated differentially expressed genes
 
+<p align="center">
+  <a href="1-figures/differential_gene_expression/GO_enrichment_day4.svg">
+    <img src="1-figures/differential_gene_expression/GO_enrichment_day4.svg" alt="GO enrichment — Day 4" width="600">
+  </a>
+</p>
+
+<p align="center">
+  <a href="1-figures/differential_gene_expression/GO_enrichment_day7.svg">
+    <img src="1-figures/differential_gene_expression/GO_enrichment_day7.svg" alt="GO enrichment — Day 7" width="600">
+  </a>
+</p>
+
+<p align="center">
+  <a href="1-figures/differential_gene_expression/GO_enrichment_day10.svg">
+    <img src="1-figures/differential_gene_expression/GO_enrichment_day10.svg" alt="GO enrichment — Day 10" width="600">
+  </a>
+</p>
+
+<p align="center">
+  <a href="1-figures/differential_gene_expression/GO_enrichment_day15.svg">
+    <img src="1-figures/differential_gene_expression/GO_enrichment_day15.svg" alt="GO enrichment — Day 15" width="600">
+  </a>
+</p>
+
 ## edgeR Counts per million (CPM) boxpltos of genes of interest over course of differentiation
+
+## Venn diagrams of upregulated + downregulated DEGs shared across all 4 timepoints
+
+<p align="center">
+  <a href="1-figures/differential_gene_expression/upset_upregulated.svg">
+    <img src="1-figures/differential_gene_expression/upset_upregulated.svg" alt="UpSet — Upregulated" width="400">
+  </a>
+  <a href="1-figures/differential_gene_expression/venn_upregulated.svg">
+    <img src="1-figures/differential_gene_expression/venn_upregulated.svg" alt="Venn — Upregulated" width="400">
+  </a>
+</p>
+
+<p align="center">
+  <a href="1-figures/differential_gene_expression/upset_downregulated.svg">
+    <img src="1-figures/differential_gene_expression/upset_downregulated.svg" alt="UpSet — Downregulated" width="400">
+  </a>
+  <a href="1-figures/differential_gene_expression/venn_downregulated.svg">
+    <img src="1-figures/differential_gene_expression/venn_downregulated.svg" alt="Venn — Downregulated" width="400">
+  </a>
+</p>
+
+## Aggregate gene expression lineplots to visualize change in GO term-associated gene expression over time
+
+<p align="center">
+  <a href="1-figures/differential_gene_expression/combined_lineplots_grid.svg">
+    <img src="1-figures/differential_gene_expression/combined_lineplots_grid.svg" alt="Combined lineplots grid" width="700">
+  </a>
+</p>
